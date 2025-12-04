@@ -150,6 +150,19 @@ pub struct Config {
     pub stderr: bool,
 }
 
+fn is_complex_closure(node: &Node) -> bool {
+    if node.kind != "CLOSURE_EXPR" {
+        return false;
+    }
+    if node.find_children("BLOCK_EXPR")
+        .and_then(|it| it.find_children("STMT_LIST"))
+        .is_none_or(|it| it.sub().len() < 8)
+    {
+        return false;
+    }
+    true
+}
+
 pub fn term_expr_inserts(
     node: &Node,
     src: &str,
@@ -169,8 +182,9 @@ pub fn term_expr_inserts(
     let pather = r#"::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1)"#;
 
     node.visit(&mut |node, action| {
+        const SIMPLE_CLOSURE: SmolStr = SmolStr::new_inline("__simple_closure__");
         if action.is_leave() {
-            if let "FN" | "CLOSURE_EXPR" = node.kind.as_str() {
+            if node.kind == "FN" || node.kind == "CLOSURE_EXPR" {
                 fn_names.pop().unwrap();
             }
             return None;
@@ -179,11 +193,19 @@ pub fn term_expr_inserts(
             let name = node.find_children("NAME")?;
             fn_names.push(format_smolstr!("[track] {}", &src[name]));
         } else if node.kind == "CLOSURE_EXPR" {
-            let name = format_smolstr!("closure{closures}");
-            fn_names.push(format_smolstr!("[track] {name}"));
-            at!(node.start(), "/*{name}*/");
+            if is_complex_closure(node) {
+                let name = format_smolstr!("closure{closures}");
+                fn_names.push(format_smolstr!("[track] {name}"));
+                at!(node.start(), "/*{name}*/");
+            } else {
+                fn_names.push(SIMPLE_CLOSURE);
+            }
         }
         let name = fn_names.last().unwrap();
+
+        if name == &SIMPLE_CLOSURE {
+            return None;
+        }
 
         let try_trait = format!{"trait _IsTryOk{{\
                 fn is_try_ok(&self)->bool;\
@@ -247,6 +269,9 @@ pub fn term_expr_inserts(
         }
         None
     });
+
+    assert_eq!(fn_names, ["unnamed_fn"]);
+
     inserts
 }
 
@@ -428,9 +453,9 @@ r#"fn foo(n: u8) -> Option<u8> {
         expect![[r#"
             fn foo(n: u8) -> Option<u8> {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });}println!("[track] foo enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let m =  _track!(@"'1 ",n.checked_sub(16))?;
-                let _ = /*closure'0 */|| {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] closure'0  tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] closure'0  return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] closure'0  endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] closure'0  endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });}println!("[track] closure'0  enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());_track!{%"'2 ",2}};
+                let _ = || 2;
                 if m == 0 {
-                    return _track!(+"'3 ", None);
+                    return _track!(+"'2 ", None);
                 }
                 _track!{%"'0 ",Some(m)}
             }
