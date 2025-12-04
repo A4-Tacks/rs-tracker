@@ -201,9 +201,12 @@ pub fn term_expr_inserts(
                 (+$s:tt,$($e:expr)?)=>({{let __val = _track!(!$($e)?);{output}!(\
                     \"{name} return{{}} at {{}}:{{}}{debug}\",\
                     $s,{pather},::core::line!()); __val }});\
-                (%$s:tt,$($e:expr$(;)?)?)=>({{let __val = _track!(!$($e)?);{output}!(\
+                (%$s:tt,$($e:expr)?)=>({{let __val = _track!(!$($e)?);{output}!(\
                     \"{name} endret{{}} at {{}}:{{}}{debug}\",\
                     $s,{pather},::core::line!()); __val }});\
+                (%$s:tt,$e:stmt $(;)?)=>({{{{$e}};let __val = ();{output}!(\
+                    \"{name} endret{{}} at {{}}:{{}}{debug}\",\
+                    $s,{pather},::core::line!()); }});\
             }}\
             {output}!(\"{name} enter     at {{}}:{{}}\",{pather},::core::line!());\
             "};
