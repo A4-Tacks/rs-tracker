@@ -29,6 +29,11 @@ fn main() {
         println!("{v}");
         return;
     }
+    if let Some(arg) = matched.free.first() {
+        eprintln!("Excess argument: {arg:?}");
+        exit(2)
+    }
+
     let config = Config {
         debug: !matched.opt_present("no-debug"),
         stderr: matched.opt_present("stderr"),
