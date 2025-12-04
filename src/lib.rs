@@ -193,13 +193,15 @@ pub fn term_expr_inserts(
                 fn is_try_ok(&self)->bool{{self.is_some()}}\
             }}\
             macro_rules!_track{{\
-                (@$s:tt,$e:expr)=>({{let __val = $e;if !_IsTryOk::is_try_ok(&__val){{{output}!(\
+                (!)=>(());\
+                (!$t:tt)=>($t);\
+                (@$s:tt,$($e:expr)?)=>({{let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){{{output}!(\
                     \"{name} tryret{{}} at {{}}:{{}}{debug}\",\
                     $s,{pather},::core::line!())}}; __val }});\
-                (+$s:tt,$e:expr)=>({{let __val = $e;{output}!(\
+                (+$s:tt,$($e:expr)?)=>({{let __val = _track!(!$($e)?);{output}!(\
                     \"{name} return{{}} at {{}}:{{}}{debug}\",\
                     $s,{pather},::core::line!()); __val }});\
-                (%$s:tt,$e:expr)=>({{let __val = $e;{output}!(\
+                (%$s:tt,$($e:expr$(;)?)?)=>({{let __val = _track!(!$($e)?);{output}!(\
                     \"{name} endret{{}} at {{}}:{{}}{debug}\",\
                     $s,{pather},::core::line!()); __val }});\
             }}\
@@ -421,9 +423,9 @@ r#"fn foo(n: u8) -> Option<u8> {
         let inserts = term_expr_inserts(&node, &s, Config { debug: true, ..Default::default() });
         apply_inserts(inserts, &mut s);
         expect![[r#"
-            fn foo(n: u8) -> Option<u8> {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(@$s:tt,$e:expr)=>({let __val = $e;if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$e:expr)=>({let __val = $e;println!("[track] foo return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:expr)=>({let __val = $e;println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });}println!("[track] foo enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+            fn foo(n: u8) -> Option<u8> {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr$(;)?)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });}println!("[track] foo enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let m =  _track!(@"'1 ",n.checked_sub(16))?;
-                let _ = /*closure'0 */|| {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(@$s:tt,$e:expr)=>({let __val = $e;if !_IsTryOk::is_try_ok(&__val){println!("[track] closure'0  tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$e:expr)=>({let __val = $e;println!("[track] closure'0  return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:expr)=>({let __val = $e;println!("[track] closure'0  endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });}println!("[track] closure'0  enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());_track!{%"'2 ",2}};
+                let _ = /*closure'0 */|| {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] closure'0  tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] closure'0  return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr$(;)?)?)=>({let __val = _track!(!$($e)?);println!("[track] closure'0  endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });}println!("[track] closure'0  enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());_track!{%"'2 ",2}};
                 if m == 0 {
                     return _track!(+"'3 ", None);
                 }
