@@ -1,7 +1,6 @@
 use std::{cell::Cell, fmt};
 
 use itertools::Itertools;
-use litrs::StringLit;
 use smol_strc::{SmolStr, format_smolstr};
 use text_size::{TextRange, TextSize};
 
@@ -34,7 +33,15 @@ pub struct Node {
     kind: SmolStr,
     range: TextRange,
     sub: Vec<Node>,
-    text: SmolStr,
+}
+
+impl core::ops::Index<&Node> for str {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: &Node) -> &str {
+        &self[index.range]
+    }
 }
 
 impl Node {
@@ -71,15 +78,6 @@ impl fmt::LowerHex for Node {
         Ok(())
     }
 }
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.text)?;
-        for sub in &self.sub {
-            sub.fmt(f)?;
-        }
-        Ok(())
-    }
-}
 pub fn make_node(src: &str) -> Node {
     let mut parsed_nodes = src.lines()
         .filter(|line| !line.trim().is_empty())
@@ -91,7 +89,7 @@ pub fn make_node(src: &str) -> Node {
             (ws.len() / 2, content)
         })
         .map(|(level, content)| {
-            let (content, text_lit) = content.split_once(' ').unwrap_or((content, r#""""#));
+            let (content, _) = content.split_once(' ').unwrap_or((content, r#""""#));
             let Some((kind, range)) = content.split_once('@') else {
                 panic!("invalid node: `{content}`");
             };
@@ -101,14 +99,10 @@ pub fn make_node(src: &str) -> Node {
             let [start, end] = [start, end].map(|s| s.parse().unwrap_or_else(|e| {
                 panic!("invalid node range number ({e}): `{content}`");
             })).map(TextSize::new);
-            let text = StringLit::parse(text_lit).unwrap_or_else(|e| {
-                panic!("invalid string lit ({e}): {text_lit}")
-            }).into_value().into();
             (level, Node {
                 kind: kind.into(),
                 range: TextRange::new(start, end),
                 sub: vec![],
-                text,
             })
         });
     let (first_level, node) = parsed_nodes.next().expect("nodes by empty");
@@ -158,6 +152,7 @@ pub struct Config {
 
 pub fn term_expr_inserts(
     node: &Node,
+    src: &str,
     Config { debug, stderr }: Config,
 ) -> Vec<(TextSize, SmolStr)> {
     let mut inserts = vec![];
@@ -182,7 +177,7 @@ pub fn term_expr_inserts(
         }
         if node.kind == "FN" {
             let name = node.find_children("NAME")?;
-            fn_names.push(format_smolstr!("[track] {name}"));
+            fn_names.push(format_smolstr!("[track] {}", &src[name]));
         } else if node.kind == "CLOSURE_EXPR" {
             let name = format_smolstr!("closure{closures}");
             fn_names.push(format_smolstr!("[track] {name}"));
@@ -401,29 +396,29 @@ SOURCE_FILE@0..137
         WHITESPACE@134..135 "\n"
         R_CURLY@135..136 "}"
   WHITESPACE@136..137 "\n"
-
+"#};
+    const TEST_SRC: &str = {
+r#"fn foo(n: u8) -> Option<u8> {
+    let m = n.checked_sub(16)?;
+    let _ = || 2;
+    if m == 0 {
+        return None;
+    }
+    Some(m)
+}
 "#};
 
     #[test]
-    fn display_sources() {
+    fn test_data() {
         let node = make_node(TEST_AST);
-        expect![[r#"
-            fn foo(n: u8) -> Option<u8> {
-                let m = n.checked_sub(16)?;
-                let _ = || 2;
-                if m == 0 {
-                    return None;
-                }
-                Some(m)
-            }
-        "#]].assert_eq(&node.to_string());
+        assert_eq!(usize::from(node.range.end()), TEST_SRC.len());
     }
 
     #[test]
     fn test_replace() {
+        let mut s = TEST_SRC.to_string();
         let node = make_node(TEST_AST);
-        let inserts = term_expr_inserts(&node, Config { debug: true, ..Default::default() });
-        let mut s = node.to_string();
+        let inserts = term_expr_inserts(&node, &s, Config { debug: true, ..Default::default() });
         apply_inserts(inserts, &mut s);
         expect![[r#"
             fn foo(n: u8) -> Option<u8> {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(@$s:tt,$e:expr)=>({let __val = $e;if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$e:expr)=>({let __val = $e;println!("[track] foo return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:expr)=>({let __val = $e;println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });}println!("[track] foo enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
