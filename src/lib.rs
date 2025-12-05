@@ -4,6 +4,8 @@ use itertools::Itertools;
 use smol_strc::{SmolStr, format_smolstr};
 use text_size::{TextRange, TextSize};
 
+mod kind;
+
 pub enum VisitAction {
     Enter,
     Leave,
@@ -245,6 +247,9 @@ pub fn term_expr_inserts(
                         | "WHITESPACE"
                         | "COMMENT"
                         ))?;
+                if kind::is_item_or_let(tail) {
+                    return None;
+                }
                 at!(tail.start(), r#"{{_track!{{%"{mark}","#);
                 at!(tail.end(), r#"}}}}"#);
             }
