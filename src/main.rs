@@ -7,6 +7,7 @@ fn main() {
     let options = getopts_options! {
         -n, --no-debug      "not print return value debug";
         -e, --stderr        "use eprintln output";
+        -d, --delete        "delete mode, delete generated _track";
         -p, --program=PATH  "rust-analyzer path";
         -h, --help          "show help messages";
         -v, --version       "show version";
@@ -40,7 +41,7 @@ fn main() {
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
 
-    let src = match io::read_to_string(stdin().lock()) {
+    let mut src = match io::read_to_string(stdin().lock()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{e}");
@@ -66,8 +67,12 @@ fn main() {
     let rowan = String::from_utf8_lossy(&r_a_out.stdout);
 
     let node = rs_tracker::make_node(&rowan);
-    let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
-    let mut out = src;
-    rs_tracker::apply_inserts(inserts, &mut out);
-    println!("{}", out.trim_end());
+    if !matched.opt_present("delete") {
+        let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
+        rs_tracker::apply_inserts(inserts, &mut src);
+    } else {
+        let deletes = rs_tracker::remove_tracks(&node, &src);
+        rs_tracker::apply_deletes(deletes, &mut src);
+    }
+    println!("{}", src.trim_end());
 }

@@ -55,6 +55,10 @@ impl Node {
         self.sub.iter().find(|it| it.kind == kind)
     }
 
+    pub fn next_of(&self, of: &Node) -> Option<&Node> {
+        self.sub.iter().find(|it| it.start() == of.end())
+    }
+
     pub fn start(&self) -> TextSize {
         self.range.start()
     }
@@ -269,10 +273,24 @@ pub fn term_expr_inserts(
     inserts
 }
 
+mod remove_handles;
+pub use remove_handles::remove_tracks;
+
 pub fn apply_inserts(mut inserts: Vec<(TextSize, SmolStr)>, s: &mut String) {
     inserts.sort_by_key(|(at, _)| u32::from(*at));
     for (at, text) in inserts.iter().rev() {
         s.insert_str((*at).into(), text);
+    }
+}
+
+pub fn apply_deletes(mut deletes: Vec<TextRange>, s: &mut String) {
+    deletes.sort_by_key(|range| u32::from(range.start()));
+    for (a, b) in deletes.iter().tuple_windows() {
+        assert!(a.end() <= b.start(), "overlap deletes {a:?} & {b:?}\n{deletes:#?}");
+    }
+    for range in deletes.iter().rev() {
+        let range = usize::from(range.start())..usize::from(range.end());
+        s.drain(range);
     }
 }
 
