@@ -154,13 +154,7 @@ fn is_complex_closure(node: &Node) -> bool {
     if node.kind != "CLOSURE_EXPR" {
         return false;
     }
-    if node.find_children("BLOCK_EXPR")
-        .and_then(|it| it.find_children("STMT_LIST"))
-        .is_none_or(|it| it.sub().len() < 8)
-    {
-        return false;
-    }
-    true
+    node.range.len() > TextSize::new(140)
 }
 
 pub fn term_expr_inserts(
