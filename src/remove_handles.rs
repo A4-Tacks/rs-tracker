@@ -8,8 +8,18 @@ pub fn remove_tracks(node: &Node, src: &str) -> Vec<TextRange> {
         handle_pre_decl_trait(handler);
         handle_pre_decl_macro_rules(handler);
         handle_pre_decl_enter(handler);
+        handler_remove_closure_comment(handler);
+        handler_closure_wrap_braces(handler);
     }));
     deletes
+}
+
+fn curlys(node: &Node) -> Option<(&Node, &Node)> {
+    assert_eq!(node.kind, "STMT_LIST");
+    Some((
+        node.sub().first().filter(|it| it.kind == "L_CURLY")?,
+        node.sub().last().filter(|it| it.kind == "R_CURLY")?,
+    ))
 }
 
 struct Handler<'a> {
@@ -96,5 +106,31 @@ fn handle_pre_decl_enter(Handler { src, node, deletes }: &mut Handler) -> Option
         return None;
     }
     deletes.push(enterer.range);
+    None
+}
+
+fn handler_remove_closure_comment(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
+    if node.kind != "COMMENT" {
+        return None;
+    }
+    if src[*node].starts_with("/*closure'") {
+        deletes.push(node.range);
+    }
+    None
+}
+
+fn handler_closure_wrap_braces(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
+    if node.kind != "CLOSURE_EXPR" {
+        return None;
+    }
+    let block = node.find_children("BLOCK_EXPR")?.find_children("STMT_LIST")?;
+    let trait_ = block.find_children("TRAIT")?;
+    if &src[trait_.find_children("NAME")?] != "_IsTryOk" {
+        return None;
+    }
+    let (l_curly, r_curly) = curlys(block)?;
+
+    deletes.push(l_curly.range);
+    deletes.push(r_curly.range);
     None
 }
