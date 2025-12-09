@@ -1,11 +1,12 @@
 use std::{env::args, io::{self, Write, stdin}, process::{Command, Stdio, exit}};
 
 use getopts_macro::getopts_options;
-use rs_tracker::Config;
+use rs_tracker::{Config, Debug};
 
 fn main() {
     let options = getopts_options! {
         -n, --no-debug      "not print return value debug";
+        -a, --expand-debug  "use `{:#?}` print";
         -e, --stderr        "use eprintln output";
         -d, --delete        "delete mode, delete generated _track";
         -p, --program=PATH  "rust-analyzer path";
@@ -35,8 +36,12 @@ fn main() {
         exit(2)
     }
 
+    let mut debug = if !matched.opt_present("no-debug") { Debug::Inline } else { Debug::Disable };
+    if matched.opt_present("expand-debug") {
+        debug = Debug::Expand;
+    }
     let config = Config {
-        debug: !matched.opt_present("no-debug"),
+        debug,
         stderr: matched.opt_present("stderr"),
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
