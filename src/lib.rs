@@ -61,6 +61,12 @@ impl Node {
         self.sub.iter().find(|it| it.start() == of.end())
     }
 
+    pub fn split_part(&self, kind: &str) -> Option<(&[Node], &[Node])> {
+        let sub = self.sub();
+        let i = sub.iter().position(|it| it.kind == kind)?;
+        Some((&sub[..i], &sub[i+1..]))
+    }
+
     pub fn start(&self) -> TextSize {
         self.range.start()
     }
@@ -258,17 +264,10 @@ pub fn term_expr_inserts(
                 let l_curly = stmt_list.find_children("L_CURLY")?;
                 at!(l_curly.end(), "{try_trait}");
 
-                let tail = stmt_list.sub().iter().rfind(|it| !matches!(it.kind.as_str(),
-                        | "L_CURLY"
-                        | "R_CURLY"
-                        | "WHITESPACE"
-                        | "COMMENT"
-                        ))?;
-                if kind::is_item_or_let(tail) {
-                    return None;
-                }
-                at!(tail.start(), r#"{{_track!{{%"{mark}","#);
-                at!(tail.end(), r#"}}}}"#);
+                each_value_expr_leafs(stmt_list, &mut |tail| {
+                    at!(tail.start(), r#"{{_track!{{%"{mark}","#);
+                    at!(tail.end(), r#"}}}}"#);
+                });
             }
             "CLOSURE_EXPR" => {
                 let tail = node.sub().last()?;
@@ -293,6 +292,47 @@ pub fn term_expr_inserts(
     assert_eq!(fn_names, ["unnamed_fn"]);
 
     inserts
+}
+
+fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option<()> {
+    match tail.kind.as_str() {
+        "MATCH_EXPR" => {
+            tail.find_children("MATCH_ARM_LIST")?
+                .sub().iter().filter(|it| it.kind == "MATCH_ARM")
+                .for_each(|leaf| {
+                    if let Some(expr) = leaf.sub().iter()
+                        .rev()
+                        .take_while(|it| it.kind != "FAT_ARROW")
+                        .find(|it| it.kind != "COMMA")
+                    {
+                        each_value_expr_leafs(expr, handler);
+                    }
+                });
+        }
+        "BLOCK_EXPR" => each_value_expr_leafs(tail.find_children("STMT_LIST")?, handler)?,
+        "STMT_LIST" => {
+            let tail_expr = tail.sub().iter().rfind(|it| !matches!(it.kind.as_str(),
+                    | "L_CURLY"
+                    | "R_CURLY"
+                    | "WHITESPACE"
+                    | "COMMENT"
+                    ))?;
+            each_value_expr_leafs(tail_expr, handler)?
+        }
+        "IF_EXPR" if tail.find_children("ELSE_KW").is_some() => {
+            let (bef, aft) = tail.split_part("ELSE_KW").unwrap();
+            for part in [bef, aft] {
+                if let Some(part) = part.iter()
+                    .rfind(|it| matches!(&*it.kind, "BLOCK_EXPR" | "IF_EXPR"))
+                {
+                    let _ = each_value_expr_leafs(part, handler);
+                }
+            }
+        }
+        _ if kind::is_item_or_let(tail) => (),
+        _ => handler(tail),
+    }
+    Some(())
 }
 
 mod remove_handles;
