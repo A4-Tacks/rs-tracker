@@ -6,10 +6,7 @@ pub(crate) struct ShowMark(pub Cell<u32>);
 
 impl fmt::Display for ShowMark {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "'{}", self.0.get())?;
-        if self.0.get() < 10 {
-            write!(f, " ")?;
-        }
+        write!(f, "'{:<3}", self.0.get())?;
         self.0.update(|n| n+1);
         Ok(())
     }
