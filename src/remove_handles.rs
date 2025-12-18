@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn remove_tracks(node: &Node, src: &str) -> Vec<TextRange> {
+pub fn remove_tracks(node: &node::Node, src: &str) -> Vec<TextRange> {
     let mut deletes = vec![];
     node.visit(&mut |node, action| Some(if action.is_enter() {
         let handler = &mut Handler { src, node, deletes: &mut deletes };
@@ -14,7 +14,7 @@ pub fn remove_tracks(node: &Node, src: &str) -> Vec<TextRange> {
     deletes
 }
 
-fn curlys(node: &Node) -> Option<(&Node, &Node)> {
+fn curlys(node: &node::Node) -> Option<(&node::Node, &node::Node)> {
     assert_eq!(node.kind, "STMT_LIST");
     Some((
         node.sub().first().filter(|it| it.kind == "L_CURLY")?,
@@ -32,7 +32,7 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
     if node.kind != "STMT_LIST" {
         return None;
     }
-    if node.sub.len() != 3 {
+    if node.sub().len() != 3 {
         return None;
     }
     let call = node
@@ -60,7 +60,7 @@ fn handle_pre_decl_trait(Handler { src, node, deletes }: &mut Handler) -> Option
     if &src[trait_.find_children("NAME")?] != "_IsTryOk" {
         return None;
     }
-    deletes.push(trait_.range);
+    deletes.push(trait_.range());
     for next in node.sub().iter()
         .skip_while(|it| it.end() != trait_.end())
         .skip(1)
@@ -71,7 +71,7 @@ fn handle_pre_decl_trait(Handler { src, node, deletes }: &mut Handler) -> Option
         if &src[next.find_children("PATH_TYPE")?] != "_IsTryOk" {
             return None;
         }
-        deletes.push(next.range);
+        deletes.push(next.range());
     }
     None
 }
@@ -84,7 +84,7 @@ fn handle_pre_decl_macro_rules(Handler { src, node, deletes }: &mut Handler) -> 
     if &src[makro.find_children("NAME")?] != "_track" {
         return None;
     }
-    deletes.push(makro.range);
+    deletes.push(makro.range());
     None
 }
 
@@ -105,7 +105,7 @@ fn handle_pre_decl_enter(Handler { src, node, deletes }: &mut Handler) -> Option
     if !matches!(&src[call.find_children("PATH")?], "println" | "eprintln") {
         return None;
     }
-    deletes.push(enterer.range);
+    deletes.push(enterer.range());
     None
 }
 
@@ -114,7 +114,7 @@ fn handler_remove_closure_comment(Handler { src, node, deletes }: &mut Handler) 
         return None;
     }
     if src[*node].starts_with("/*closure'") {
-        deletes.push(node.range);
+        deletes.push(node.range());
     }
     None
 }
@@ -130,7 +130,7 @@ fn handler_closure_wrap_braces(Handler { src, node, deletes }: &mut Handler) -> 
     }
     let (l_curly, r_curly) = curlys(block)?;
 
-    deletes.push(l_curly.range);
-    deletes.push(r_curly.range);
+    deletes.push(l_curly.range());
+    deletes.push(r_curly.range());
     None
 }

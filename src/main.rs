@@ -8,6 +8,7 @@ fn main() {
         -n, --no-debug      "not print return value debug";
         -a, --expand-debug  "use `{:#?}` print";
         -e, --stderr        "use eprintln output";
+        -s, --label-stmts   "insert label before statements";
         -d, --delete        "delete mode, delete generated _track";
         -p, --program=PATH  "rust-analyzer path";
         -h, --help          "show help messages";
@@ -42,7 +43,8 @@ fn main() {
     }
     let config = Config {
         debug,
-        stderr: matched.opt_present("stderr"),
+        stderr:     matched.opt_present("stderr"),
+        label_stmt: matched.opt_present("label-stmts"),
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
 
@@ -71,7 +73,7 @@ fn main() {
     }
     let rowan = String::from_utf8_lossy(&r_a_out.stdout);
 
-    let node = rs_tracker::make_node(&rowan);
+    let node = rs_tracker::make(&rowan);
     if !matched.opt_present("delete") {
         let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
         rs_tracker::apply_inserts(inserts, &mut src);
