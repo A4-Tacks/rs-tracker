@@ -3,6 +3,7 @@ use smol_strc::SmolStr;
 use itertools::Itertools;
 
 pub fn apply_inserts(mut inserts: Vec<(TextSize, SmolStr)>, s: &mut String) {
+    inserts.reverse();
     inserts.sort_by_key(|(at, _)| u32::from(*at));
     for (at, text) in inserts.iter().rev() {
         s.insert_str((*at).into(), text);
@@ -28,8 +29,8 @@ mod tests {
     fn test_inserts() {
         let src = &mut "adf".to_owned();
         apply_inserts([
-            (TextSize::of("a"), "b".into()),
             (TextSize::of("a"), "c".into()),
+            (TextSize::of("a"), "b".into()),
             (TextSize::of("ad"), "e".into()),
         ].into(), src);
         assert_eq!(src, "abcdef")
