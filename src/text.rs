@@ -21,3 +21,12 @@ pub(crate) fn is_complex_closure(node: &Node) -> bool {
     }
     node.range().len() > TextSize::new(140)
 }
+
+pub fn indent(ws: &str) -> Option<&str> {
+    if ws.trim().len() != 0 {
+        debug_assert!(false, "{ws:?}");
+        return None;
+    }
+    let i = ws.rfind('\n')?;
+    Some(&ws[i..])
+}

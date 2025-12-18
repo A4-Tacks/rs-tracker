@@ -32,7 +32,7 @@ pub fn term_expr_inserts(
     };
     let output = if stderr { "eprintln" } else { "println" };
     let pather = r#"::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1)"#;
-    let mut prev_ws = "";
+    let mut prev_indent = "";
 
     node.visit(&mut |node, action| {
         const SIMPLE_CLOSURE: SmolStr = SmolStr::new_inline("__simple_closure__");
@@ -41,7 +41,7 @@ pub fn term_expr_inserts(
                 fn_names.pop().unwrap();
             }
             if label_stmt && matches!(&*node.kind, "LET_STMT" | "EXPR_STMT") {
-                at!(node.start(), r#"{output}!("{mark}");{prev_ws}"#);
+                at!(node.start(), r#"{output}!("{mark}");{prev_indent}"#);
             }
             return None;
         }
@@ -57,6 +57,9 @@ pub fn term_expr_inserts(
             } else {
                 fn_names.push(SIMPLE_CLOSURE);
             }
+        }
+        if node.kind == "WHITESPACE" && let Some(indent) = text::indent(&src[node]) {
+            prev_indent = indent;
         }
         let name = fn_names.last().unwrap();
 
@@ -123,9 +126,6 @@ pub fn term_expr_inserts(
                 let op = node.find_children("QUESTION")?;
                 at!(node.start(), r#"{{_track!(@"{mark}","#);
                 at!(op.start(), r#")}}"#);
-            }
-            "WHITESPACE" => {
-                prev_ws = &src[node];
             }
             _ => {}
         }
