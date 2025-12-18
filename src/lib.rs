@@ -1,35 +1,15 @@
-use std::{cell::Cell, fmt};
-
+use text::{is_complex_closure, ShowMark};
 use smol_strc::{SmolStr, format_smolstr};
 use text_size::{TextRange, TextSize};
 
 mod kind;
+mod text;
 mod config;
 pub use config::*;
 
 pub mod node;
 pub mod edits;
 pub use node::*;
-
-struct ShowMark(Cell<u32>);
-
-impl fmt::Display for ShowMark {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "'{}", self.0.get())?;
-        if self.0.get() < 10 {
-            write!(f, " ")?;
-        }
-        self.0.update(|n| n+1);
-        Ok(())
-    }
-}
-
-fn is_complex_closure(node: &Node) -> bool {
-    if node.kind != "CLOSURE_EXPR" {
-        return false;
-    }
-    node.range().len() > TextSize::new(140)
-}
 
 pub fn term_expr_inserts(
     node: &Node,
