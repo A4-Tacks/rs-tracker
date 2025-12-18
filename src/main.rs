@@ -1,7 +1,7 @@
 use std::{env::args, io::{self, Write, stdin}, process::{Command, Stdio, exit}};
 
 use getopts_macro::getopts_options;
-use rs_tracker::{Config, Debug};
+use rs_tracker::{Config, Debug, edits};
 
 fn main() {
     let options = getopts_options! {
@@ -76,10 +76,10 @@ fn main() {
     let node = rs_tracker::make(&rowan);
     if !matched.opt_present("delete") {
         let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
-        rs_tracker::apply_inserts(inserts, &mut src);
+        edits::apply_inserts(inserts, &mut src);
     } else {
         let deletes = rs_tracker::remove_tracks(&node, &src);
-        rs_tracker::apply_deletes(deletes, &mut src);
+        edits::apply_deletes(deletes, &mut src);
     }
     println!("{}", src.trim_end());
 }

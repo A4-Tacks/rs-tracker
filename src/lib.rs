@@ -1,6 +1,5 @@
 use std::{cell::Cell, fmt};
 
-use itertools::Itertools;
 use smol_strc::{SmolStr, format_smolstr};
 use text_size::{TextRange, TextSize};
 
@@ -9,6 +8,7 @@ mod config;
 pub use config::*;
 
 pub mod node;
+pub mod edits;
 pub use node::*;
 
 struct ShowMark(Cell<u32>);
@@ -200,25 +200,6 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
 
 mod remove_handles;
 pub use remove_handles::remove_tracks;
-
-pub fn apply_inserts(mut inserts: Vec<(TextSize, SmolStr)>, s: &mut String) {
-    inserts.sort_by_key(|(at, _)| u32::from(*at));
-    for (at, text) in inserts.iter().rev() {
-        s.insert_str((*at).into(), text);
-    }
-}
-
-pub fn apply_deletes(mut deletes: Vec<TextRange>, s: &mut String) {
-    deletes.sort_by_key(|range| u32::from(range.start()));
-    for (a, b) in deletes.iter().tuple_windows() {
-        assert!(a.end() <= b.start(), "overlap deletes {a:?} & {b:?}\n{deletes:#?}");
-    }
-    for range in deletes.iter().rev() {
-        let range = usize::from(range.start())..usize::from(range.end());
-        s.drain(range);
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -519,7 +500,7 @@ r#"fn foo(n: u8) -> Option<u8> {
         let mut s = TEST_SRC.to_string();
         let node = make(TEST_AST.data());
         let inserts = term_expr_inserts(&node, &s, Config { debug: Debug::Inline, ..Default::default() });
-        apply_inserts(inserts, &mut s);
+        edits::apply_inserts(inserts, &mut s);
         expect![[r#"
             fn foo(n: u8) -> Option<u8> {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] foo endret{} at {}:{} = {__val:?}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });}println!("[track] foo enter     at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let m = {_track!(@"'1 ",n.checked_sub(16))}?;
