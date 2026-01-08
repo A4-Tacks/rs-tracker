@@ -1,4 +1,4 @@
-SOURCE_FILE@0..23197
+SOURCE_FILE@0..23312
   USE@0..16
     USE_KW@0..3 "use"
     WHITESPACE@3..4 " "
@@ -9490,5 +9490,115 @@ SOURCE_FILE@0..23197
                 IDENT@23190..23194 "None"
         WHITESPACE@23194..23195 "\n"
         R_CURLY@23195..23196 "}"
-  WHITESPACE@23196..23197 "\n"
+  WHITESPACE@23196..23198 "\n\n"
+  FN@23198..23311
+    FN_KW@23198..23200 "fn"
+    WHITESPACE@23200..23201 " "
+    NAME@23201..23209
+      IDENT@23201..23209 "_special"
+    PARAM_LIST@23209..23211
+      L_PAREN@23209..23210 "("
+      R_PAREN@23210..23211 ")"
+    WHITESPACE@23211..23212 " "
+    BLOCK_EXPR@23212..23311
+      STMT_LIST@23212..23311
+        L_CURLY@23212..23213 "{"
+        WHITESPACE@23213..23218 "\n    "
+        EXPR_STMT@23218..23228
+          IF_EXPR@23218..23228
+            IF_KW@23218..23220 "if"
+            WHITESPACE@23220..23221 " "
+            LITERAL@23221..23225
+              TRUE_KW@23221..23225 "true"
+            WHITESPACE@23225..23226 " "
+            BLOCK_EXPR@23226..23228
+              STMT_LIST@23226..23228
+                L_CURLY@23226..23227 "{"
+                R_CURLY@23227..23228 "}"
+        WHITESPACE@23228..23233 "\n    "
+        EXPR_STMT@23233..23248
+          IF_EXPR@23233..23248
+            IF_KW@23233..23235 "if"
+            WHITESPACE@23235..23236 " "
+            LET_EXPR@23236..23245
+              LET_KW@23236..23239 "let"
+              WHITESPACE@23239..23240 " "
+              IDENT_PAT@23240..23241
+                NAME@23240..23241
+                  IDENT@23240..23241 "x"
+              WHITESPACE@23241..23242 " "
+              EQ@23242..23243 "="
+              WHITESPACE@23243..23244 " "
+              LITERAL@23244..23245
+                INT_NUMBER@23244..23245 "2"
+            WHITESPACE@23245..23246 " "
+            BLOCK_EXPR@23246..23248
+              STMT_LIST@23246..23248
+                L_CURLY@23246..23247 "{"
+                R_CURLY@23247..23248 "}"
+        WHITESPACE@23248..23253 "\n    "
+        EXPR_STMT@23253..23276
+          IF_EXPR@23253..23276
+            IF_KW@23253..23255 "if"
+            WHITESPACE@23255..23256 " "
+            BIN_EXPR@23256..23273
+              LET_EXPR@23256..23265
+                LET_KW@23256..23259 "let"
+                WHITESPACE@23259..23260 " "
+                IDENT_PAT@23260..23261
+                  NAME@23260..23261
+                    IDENT@23260..23261 "x"
+                WHITESPACE@23261..23262 " "
+                EQ@23262..23263 "="
+                WHITESPACE@23263..23264 " "
+                LITERAL@23264..23265
+                  INT_NUMBER@23264..23265 "2"
+              WHITESPACE@23265..23266 " "
+              AMP2@23266..23268 "&&"
+              WHITESPACE@23268..23269 " "
+              LITERAL@23269..23273
+                TRUE_KW@23269..23273 "true"
+            WHITESPACE@23273..23274 " "
+            BLOCK_EXPR@23274..23276
+              STMT_LIST@23274..23276
+                L_CURLY@23274..23275 "{"
+                R_CURLY@23275..23276 "}"
+        WHITESPACE@23276..23281 "\n    "
+        IF_EXPR@23281..23309
+          IF_KW@23281..23283 "if"
+          WHITESPACE@23283..23284 " "
+          BIN_EXPR@23284..23306
+            LET_EXPR@23284..23293
+              LET_KW@23284..23287 "let"
+              WHITESPACE@23287..23288 " "
+              IDENT_PAT@23288..23289
+                NAME@23288..23289
+                  IDENT@23288..23289 "x"
+              WHITESPACE@23289..23290 " "
+              EQ@23290..23291 "="
+              WHITESPACE@23291..23292 " "
+              LITERAL@23292..23293
+                INT_NUMBER@23292..23293 "2"
+            WHITESPACE@23293..23294 " "
+            AMP2@23294..23296 "&&"
+            WHITESPACE@23296..23297 " "
+            LET_EXPR@23297..23306
+              LET_KW@23297..23300 "let"
+              WHITESPACE@23300..23301 " "
+              IDENT_PAT@23301..23302
+                NAME@23301..23302
+                  IDENT@23301..23302 "y"
+              WHITESPACE@23302..23303 " "
+              EQ@23303..23304 "="
+              WHITESPACE@23304..23305 " "
+              LITERAL@23305..23306
+                INT_NUMBER@23305..23306 "3"
+          WHITESPACE@23306..23307 " "
+          BLOCK_EXPR@23307..23309
+            STMT_LIST@23307..23309
+              L_CURLY@23307..23308 "{"
+              R_CURLY@23308..23309 "}"
+        WHITESPACE@23309..23310 "\n"
+        R_CURLY@23310..23311 "}"
+  WHITESPACE@23311..23312 "\n"
 

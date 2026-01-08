@@ -719,3 +719,10 @@ fn handler_closure_wrap_braces(Handler { src, node, deletes }: &mut Handler) -> 
     deletes.push(r_curly.range);
     None
 }
+
+fn _special() {
+    if true {}
+    if let x = 2 {}
+    if let x = 2 && true {}
+    if let x = 2 && let y = 3 {}
+}
