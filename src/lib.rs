@@ -159,7 +159,9 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
                         .take_while(|it| it.kind != "FAT_ARROW")
                         .find(|it| it.kind != "COMMA")
                     {
-                        each_value_expr_leafs(expr, handler);
+                        if each_value_expr_leafs(expr, handler).is_none() {
+                            handler(expr)
+                        }
                     }
                 });
         }
