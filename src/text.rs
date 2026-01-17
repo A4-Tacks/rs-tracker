@@ -19,6 +19,7 @@ pub(crate) fn is_complex_closure(node: &Node) -> bool {
     node.range().len() > TextSize::new(140)
 }
 
+#[track_caller]
 pub fn indent(ws: &str) -> Option<&str> {
     if ws.trim().len() != 0 {
         debug_assert!(false, "{ws:?}");
@@ -26,4 +27,14 @@ pub fn indent(ws: &str) -> Option<&str> {
     }
     let i = ws.rfind('\n')?;
     Some(&ws[i..])
+}
+
+pub fn indent_of<'a, I>(src: &str, ancestors: I) -> Option<&str>
+where I: IntoIterator<Item = &'a Node>,
+      I::IntoIter: DoubleEndedIterator,
+{
+    ancestors.into_iter().rev()
+        .flat_map(|it| it.sub())
+        .filter_map(|it| (it.kind == "WHITESPACE").then_some(&src[it]))
+        .find_map(indent)
 }

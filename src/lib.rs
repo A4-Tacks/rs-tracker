@@ -33,9 +33,18 @@ pub fn term_expr_inserts(
     };
     let output = if stderr { "eprintln" } else { "println" };
     let pather = r#"::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1)"#;
+    let mut ancestors: Vec<&Node> = vec![];
 
     node.visit(&mut |node, action| {
         const SIMPLE_CLOSURE: SmolStr = SmolStr::new_inline("__simple_closure__");
+
+        if action.is_leave() {
+            ancestors.pop().unwrap();
+        }
+        let ancestors = guard(&mut ancestors, |ancestors| if action.is_enter() {
+            ancestors.push(node);
+        });
+
         if action.is_leave() {
             if node.kind == "FN" || node.kind == "CLOSURE_EXPR" {
                 fn_names.pop().unwrap();
@@ -64,6 +73,9 @@ pub fn term_expr_inserts(
             "[track] {}{name}",
             if indent_name { "  ".repeat(fn_names.len().saturating_sub(2)) } else { String::new() },
         );
+        let indent = text::indent_of(src, ancestors.iter().copied())
+            .unwrap_or("\n");
+        let block = Block::with(ancestors.iter().rev().map(|it| it.kind.as_str()));
 
         let try_trait = format!{"trait _IsTryOk{{\
                 fn is_try_ok(&self)->bool;\
@@ -95,17 +107,15 @@ pub fn term_expr_inserts(
             "};
 
         match node.kind.as_str() {
-            "FN" => {
-                let stmt_list = node
-                    .find_children("BLOCK_EXPR")?
-                    .find_children("STMT_LIST")?;
-                let l_curly = stmt_list.find_children("L_CURLY")?;
-                at!(l_curly.end(), "{try_trait}");
-
-                each_value_expr_leafs(stmt_list, &mut |tail| {
-                    at!(tail.start(), r#"{{_track!{{%"{mark}","#);
-                    at!(tail.end(), r#"}}}}"#);
-                });
+            "RETURN_EXPR" => {
+                let kw = node.find_children("RETURN_KW")?;
+                at!(kw.end(), r#"{{_track!(+"{mark}","#);
+                at!(node.end(), r#")}}"#);
+            }
+            "TRY_EXPR" => {
+                let op = node.find_children("QUESTION")?;
+                at!(node.start(), r#"{{_track!(@"{mark}","#);
+                at!(op.start(), r#")}}"#);
             }
             "CLOSURE_EXPR" => {
                 let tail = node.sub().last()?;
@@ -118,24 +128,25 @@ pub fn term_expr_inserts(
 
                 at!(tail.end(), r#"}}"#);
             }
-            "RETURN_EXPR" => {
-                let kw = node.find_children("RETURN_KW")?;
-                at!(kw.end(), r#"{{_track!(+"{mark}","#);
-                at!(node.end(), r#")}}"#);
-            }
-            "TRY_EXPR" => {
-                let op = node.find_children("QUESTION")?;
-                at!(node.start(), r#"{{_track!(@"{mark}","#);
-                at!(op.start(), r#")}}"#);
-            }
-            "STMT_LIST" if label_stmt => {
-                let indent = node.find_children("WHITESPACE")
-                    .and_then(|it| text::indent(&src[it]))
-                    .unwrap_or("\n");
-                let stmts = node.sub().iter().filter(|it| kind::is_content(*it));
-                for stmt_like in stmts {
-                    at!(stmt_like.start(), r#"{{_track!(*"{label_mark}");}}{indent}"#);
+            "STMT_LIST" => match block {
+                Block::Fn => {
+                    let l_curly = node.find_children("L_CURLY")?;
+                    at!(l_curly.end(), "{try_trait}");
+
+                    each_value_expr_leafs(node, &mut |tail| {
+                        at!(tail.start(), r#"{{_track!{{%"{mark}","#);
+                        at!(tail.end(), r#"}}}}"#);
+                    });
+                },
+                Block::Closure => {},
+                Block::None => if label_stmt {
+                    let l_curly = node.find_children("L_CURLY")?;
+                    let indent = text::indent_of(src, [node]).unwrap_or("");
+                    at!(l_curly.end(), r#"{indent}{{_track!(*"{label_mark}");}}"#);
                 }
+            }
+            _ if kind::is_pure_stmt(node) => if label_stmt {
+                at!(node.end(), r#"{indent}{{_track!(*"{label_mark}");}}"#);
             }
             _ => {}
         }
@@ -167,7 +178,9 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
         }
         "BLOCK_EXPR" => each_value_expr_leafs(tail.find_children("STMT_LIST")?, handler)?,
         "STMT_LIST" => {
-            let tail_expr = tail.sub().iter().rfind(|it| kind::is_content(*it))?;
+            let tail_expr = tail.sub().iter().rfind(|it| {
+                kind::is_content(*it) && !kind::is_item_or_let(*it)
+            })?;
             each_value_expr_leafs(tail_expr, handler)?
         }
         "IF_EXPR" if tail.find_children("ELSE_KW").is_some() => {
@@ -184,6 +197,40 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
         _ => handler(tail),
     }
     Some(())
+}
+
+enum Block {
+    Fn,
+    Closure,
+    None,
+}
+impl Block {
+    fn with<'a>(ancestors: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut iter = ancestors.into_iter().peekable();
+        iter.next_if(|it| *it == "STMT_LIST");
+        iter.next_if(|it| *it == "BLOCK_EXPR");
+        match iter.next().unwrap_or("") {
+            "FN" => Self::Fn,
+            "CLOSURE_EXPR" => Self::Closure,
+            _ => Self::None,
+        }
+    }
+}
+
+fn guard<T, F: FnOnce(T)>(_0: T, _1: F) -> Guard<T, F> {
+    Guard(_0.into(), _1.into())
+}
+struct Guard<T, F: FnOnce(T)>(Option<T>, Option<F>);
+impl<T, F: FnOnce(T)> std::ops::Deref for Guard<T, F> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().unwrap()
+    }
+}
+impl<T, F: FnOnce(T)> Drop for Guard<T, F> {
+    fn drop(&mut self) {
+        self.1.take().unwrap()(self.0.take().unwrap())
+    }
 }
 
 mod remove_handles;
@@ -238,6 +285,20 @@ r#"fn foo(n: u8) -> Option<u8> {
         node
     }
 
+    fn trim_indent(src: &str) -> String {
+        let src = src.trim_matches(['\n', '\r']);
+        let indent = src.lines().filter(|it| !it.is_empty())
+            .map(|line| {
+                let trimmed = line.trim_start_matches(' ');
+                line.len() - trimmed.len()
+            })
+            .min()
+            .unwrap_or_default();
+        src.split_inclusive('\n')
+            .map(|it| it.get(indent..).unwrap_or(it))
+            .collect()
+    }
+
     #[test]
     fn test_replace() {
         let mut s = TEST_SRC.to_string();
@@ -266,6 +327,54 @@ r#"fn foo(n: u8) -> Option<u8> {
                     return{_track!(+"'6  ", None)};
                 }
                 {_track!{%"'0  ",Some(m)}}
+            }
+        "#]].assert_eq(&s);
+    }
+
+    #[test]
+    fn test_lebel_stmts() {
+        let mut s = trim_indent(r#"
+        fn foo() {
+            let x = 2;
+            bar(x);
+            match () {
+                () => x /* ... */,
+                () => {
+                    let _ = 3;
+                    x
+                }
+                () => (),
+                () => {},
+                () => {
+                    baz()?
+                },
+            }
+        }
+        "#);
+        let node = parse_source(&s);
+        let inserts = term_expr_inserts(&node, &s, Config { label_stmt: true, ..Default::default() });
+        edits::apply_inserts(inserts, &mut s);
+        expect![[r#"
+            fn foo() {trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+                let x = 2;
+                {_track!(*"'0  ");}
+                bar(x);
+                {_track!(*"'1  ");}
+                match () {
+                    () => {_track!{%"'0  ",x}} /* ... */,
+                    () => {
+                        {_track!(*"'2  ");}
+                        let _ = 3;
+                        {_track!(*"'3  ");}
+                        {_track!{%"'1  ",x}}
+                    }
+                    () => {_track!{%"'2  ",()}},
+                    () => {_track!{%"'3  ",{{_track!(*"'4  ");}}}},
+                    () => {
+                        {_track!(*"'5  ");}
+                        {_track!{%"'4  ",{_track!(@"'5  ",baz())}?}}
+                    },
+                }
             }
         "#]].assert_eq(&s);
     }

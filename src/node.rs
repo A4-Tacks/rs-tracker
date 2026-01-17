@@ -45,7 +45,7 @@ impl core::ops::Index<&Node> for str {
 }
 
 impl Node {
-    pub fn visit(&self, f: &mut impl FnMut(&Self, VisitAction) -> Option<()>) {
+    pub fn visit<'a>(&'a self, f: &mut impl FnMut(&'a Self, VisitAction) -> Option<()>) {
         f(self, Enter);
         self.sub.iter().for_each(|node| node.visit(f));
         f(self, Leave);
@@ -55,8 +55,18 @@ impl Node {
         self.sub.iter().find(|it| it.kind == kind)
     }
 
-    pub fn next_of(&self, of: &Node) -> Option<&Node> {
-        self.sub.iter().find(|it| it.start() == of.end())
+    pub fn next_of(&self, node: &Node) -> Option<&Node> {
+        self.split_of(node).1.first()
+    }
+
+    #[track_caller]
+    pub fn split_of(&self, node: &Node) -> (&[Node], &[Node]) {
+        let Some(i) = self.sub.iter().position(|it| {
+            it.range() == node.range() && it.kind == node.kind
+        }) else {
+            panic!("split_of node is not children of self")
+        };
+        self.sub.split_at(i)
     }
 
     pub fn split_part(&self, kind: &str) -> Option<(&[Node], &[Node])> {
