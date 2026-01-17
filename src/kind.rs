@@ -24,3 +24,19 @@ pub fn is_item(node: &Node) -> bool {
 pub fn is_item_or_let(node: &Node) -> bool {
     is_item(node) || node.kind == "LET_STMT"
 }
+
+pub fn is_trivia(node: &Node) -> bool {
+    matches!(node.kind.as_str(),
+        | "WHITESPACE"
+        | "COMMENT")
+}
+
+pub fn is_content(node: &Node) -> bool {
+    !is_trivia(node) && !matches!(node.kind.as_str(),
+        | "L_PAREN"
+        | "R_PAREN"
+        | "L_BRACK"
+        | "R_BRACK"
+        | "L_CURLY"
+        | "R_CURLY")
+}

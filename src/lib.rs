@@ -132,11 +132,7 @@ pub fn term_expr_inserts(
                 let indent = node.find_children("WHITESPACE")
                     .and_then(|it| text::indent(&src[it]))
                     .unwrap_or("\n");
-                let stmts = node.sub().iter().filter(|it| !matches!(it.kind.as_str(),
-                        | "L_CURLY"
-                        | "R_CURLY"
-                        | "WHITESPACE"
-                        | "COMMENT"));
+                let stmts = node.sub().iter().filter(|it| kind::is_content(*it));
                 for stmt_like in stmts {
                     at!(stmt_like.start(), r#"{{_track!(*"{label_mark}");}}{indent}"#);
                 }
@@ -159,6 +155,7 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
                 .for_each(|leaf| {
                     if let Some(expr) = leaf.sub().iter()
                         .rev()
+                        .filter(|it| !kind::is_trivia(*it))
                         .take_while(|it| it.kind != "FAT_ARROW")
                         .find(|it| it.kind != "COMMA")
                     {
@@ -168,12 +165,7 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
         }
         "BLOCK_EXPR" => each_value_expr_leafs(tail.find_children("STMT_LIST")?, handler)?,
         "STMT_LIST" => {
-            let tail_expr = tail.sub().iter().rfind(|it| !matches!(it.kind.as_str(),
-                    | "L_CURLY"
-                    | "R_CURLY"
-                    | "WHITESPACE"
-                    | "COMMENT"
-                    ))?;
+            let tail_expr = tail.sub().iter().rfind(|it| kind::is_content(*it))?;
             each_value_expr_leafs(tail_expr, handler)?
         }
         "IF_EXPR" if tail.find_children("ELSE_KW").is_some() => {
