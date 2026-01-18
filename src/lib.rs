@@ -141,7 +141,7 @@ pub fn term_expr_inserts(
                     });
 
                     if !has_ret {
-                        let (tail, _) = node.split_part("R_CURLY")?;
+                        let (tail, _) = node.split_once("R_CURLY")?;
                         let tail = tail.iter().rfind(|it| !kind::is_trivia(*it))?;
                         let indent = text::indent_of(src, [node]).unwrap_or("");
                         at!(tail.end(), r#"{indent}{{_track!{{%"{mark}",()}}}}"#);
@@ -197,7 +197,7 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
             each_value_expr_leafs(tail_expr, handler)?
         }
         "IF_EXPR" if tail.find_children("ELSE_KW").is_some() => {
-            let (bef, aft) = tail.split_part("ELSE_KW").unwrap();
+            let (bef, aft) = tail.split_once("ELSE_KW").unwrap();
             for part in [bef, aft] {
                 if let Some(part) = part.iter()
                     .rfind(|it| matches!(&*it.kind, "BLOCK_EXPR" | "IF_EXPR"))
@@ -330,6 +330,16 @@ r#"fn foo(n: u8) -> Option<u8> {
             .collect()
     }
 
+    fn format_chunks(chunks: Vec<dissimilar::Chunk>) {
+        for chunk in chunks {
+            match chunk {
+                dissimilar::Chunk::Equal(text) => print!("{text}"),
+                dissimilar::Chunk::Delete(text) => print!("\x1b[41m{}\x1b[0m", text),
+                dissimilar::Chunk::Insert(text) => print!("\x1b[42m{}\x1b[0m", text),
+            }
+        }
+    }
+
     #[test]
     fn test_replace() {
         let mut s = TEST_SRC.to_string();
@@ -383,7 +393,7 @@ r#"fn foo(n: u8) -> Option<u8> {
 
     #[test]
     fn test_lebel_stmts() {
-        let mut s = trim_indent(r#"
+        let source = trim_indent(r#"
         fn foo() {
             let x = 2;
             bar(x);
@@ -413,6 +423,7 @@ r#"fn foo(n: u8) -> Option<u8> {
             }
         }
         "#);
+        let mut s = source.clone();
         let node = parse_source(&s);
         let inserts = term_expr_inserts(&node, &s, Config { label_stmt: true, ..Default::default() });
         edits::apply_inserts(inserts, &mut s);
@@ -457,5 +468,21 @@ r#"fn foo(n: u8) -> Option<u8> {
                 }
             }
         "#]].assert_eq(&s);
+
+
+        for _ in 0..2 {
+            let node = parse_source(&s);
+            let removes = remove_tracks(&node, &s);
+            edits::apply_deletes(removes, &mut s);
+        }
+
+        if s != source {
+            println!("============== Source ==============\n{source}");
+            println!("============== Actual ==============\n{s}");
+            println!("==============  Diff  ==============");
+            format_chunks(dissimilar::diff(&source, &s));
+            println!();
+            panic!()
+        }
     }
 }

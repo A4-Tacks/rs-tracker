@@ -32,8 +32,18 @@ pub fn is_trivia(node: &Node) -> bool {
 }
 
 pub fn is_content(node: &Node) -> bool {
-    !is_trivia(node) && !matches!(node.kind.as_str(),
-        | "ATTR"
+    !is_trivia(node) && !is_delim(node) && node.kind != "ATTR"
+}
+
+pub fn is_jumping(node: &Node) -> bool {
+    matches!(node.kind.as_str(),
+        | "BREAK_EXPR"
+        | "RETURN_EXPR"
+        | "CONTINUE_EXPR")
+}
+
+pub fn is_delim(node: &Node) -> bool {
+    matches!(node.kind.as_str(),
         | "L_PAREN"
         | "R_PAREN"
         | "L_BRACK"
@@ -42,9 +52,45 @@ pub fn is_content(node: &Node) -> bool {
         | "R_CURLY")
 }
 
-pub fn is_jumping(node: &Node) -> bool {
-    matches!(node.kind.as_str(),
-        | "BREAK_EXPR"
-        | "RETURN_EXPR"
-        | "CONTINUE_EXPR")
+pub struct Kind<F: Fn(&Node) -> bool>(pub F);
+
+pub trait NodePat {
+    fn matches(&self, node: &Node) -> bool;
+}
+
+impl<T: NodePat + ?Sized> NodePat for &T {
+    fn matches(&self, node: &Node) -> bool {
+        (*self).matches(node)
+    }
+}
+
+impl<F: Fn(&Node) -> bool> NodePat for Kind<F> {
+    fn matches(&self, node: &Node) -> bool {
+        (self.0)(node)
+    }
+}
+
+impl NodePat for fn(&Node) -> bool {
+    fn matches(&self, node: &Node) -> bool {
+        self(node)
+    }
+}
+
+impl<T: NodePat> NodePat for [T] {
+    fn matches(&self, node: &Node) -> bool {
+        self.iter().any(|pat| pat.matches(node))
+    }
+}
+
+impl NodePat for str {
+    fn matches(&self, node: &Node) -> bool {
+        node.kind == self
+    }
+}
+
+impl NodePat for Node {
+    fn matches(&self, node: &Node) -> bool {
+        self.range() == node.range()
+            && self.kind == node.kind
+    }
 }

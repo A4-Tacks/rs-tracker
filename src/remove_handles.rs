@@ -1,3 +1,5 @@
+use crate::kind::Kind;
+
 use super::*;
 
 pub fn remove_tracks(node: &node::Node, src: &str) -> Vec<TextRange> {
@@ -35,7 +37,7 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
     if node.sub().len() != 3 {
         return None;
     }
-    let call = node
+    let call = node.find_children("EXPR_STMT").unwrap_or(*node)
         .find_children("MACRO_EXPR")?
         .find_children("MACRO_CALL")?;
     let path = call.find_children("PATH")?;
@@ -43,11 +45,20 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
         return None;
     }
     let tt = call.find_children("TOKEN_TREE")?;
-    let r_delim = tt.find_children("R_CURLY").or_else(|| tt.find_children("R_PAREN"))?;
-    let comma = tt.find_children("COMMA")?;
+    let ty = tt.next_of(Kind(kind::is_delim)).map(|it| &src[it]);
+    match ty {
+        Some("*") => {
+            deletes.push(node.range());
+            deletes.push(indent_before(node, src)?);
+        }
+        _ => {
+            let r_delim = tt.find_children("R_CURLY").or_else(|| tt.find_children("R_PAREN"))?;
+            let comma = tt.find_children("COMMA")?;
 
-    deletes.push(TextRange::new(node.start(), comma.end()));
-    deletes.push(TextRange::new(r_delim.start(), node.end()));
+            deletes.push(TextRange::new(node.start(), comma.end()));
+            deletes.push(TextRange::new(r_delim.start(), node.end()));
+        }
+    }
 
     None
 }
@@ -133,4 +144,14 @@ fn handler_closure_wrap_braces(Handler { src, node, deletes }: &mut Handler) -> 
     deletes.push(l_curly.range());
     deletes.push(r_curly.range());
     None
+}
+
+fn indent_before(node: &node::Node, src: &str) -> Option<TextRange> {
+    let before = TextRange::up_to(node.start());
+    let before = &src[before];
+    let (_, ws) = before.rsplit_once(|it: char| !it.is_ascii_whitespace())?;
+    let indent = text::indent(ws)?;
+    let indent = TextSize::of(indent);
+    let start = node.start();
+    Some(TextRange::new(start - indent, start))
 }

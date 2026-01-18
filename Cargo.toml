@@ -1,6 +1,6 @@
 [package]
 name = "rs-tracker"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 
 [dependencies]
@@ -9,3 +9,6 @@ getopts-macro = "0.1.8"
 itertools = "0.14.0"
 smol_strc = "0.3.4"
 text-size = "1.1.1"
+
+[dev-dependencies]
+dissimilar = "1.0.10"

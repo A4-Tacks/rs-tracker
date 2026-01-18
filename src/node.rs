@@ -28,6 +28,8 @@ impl VisitAction {
 }
 use VisitAction::*;
 
+use crate::kind::NodePat;
+
 #[derive(Debug)]
 pub struct Node {
     pub kind: SmolStr,
@@ -51,31 +53,31 @@ impl Node {
         f(self, Leave);
     }
 
-    pub fn find_children(&self, kind: &str) -> Option<&Node> {
-        self.sub.iter().find(|it| it.kind == kind)
+    pub fn find_children(&self, pat: impl NodePat) -> Option<&Node> {
+        self.sub.iter().find(|it| pat.matches(*it))
     }
 
     pub fn any(&self, f: impl Fn(&Node) -> bool) -> bool {
         self.sub().iter().any(f)
     }
 
-    pub fn next_of(&self, node: &Node) -> Option<&Node> {
-        self.split_of(node).1.first()
+    #[track_caller]
+    pub fn next_of(&self, pat: impl NodePat) -> Option<&Node> {
+        self.split_of(pat).1.first()
     }
 
     #[track_caller]
-    pub fn split_of(&self, node: &Node) -> (&[Node], &[Node]) {
-        let Some(i) = self.sub.iter().position(|it| {
-            it.range() == node.range() && it.kind == node.kind
-        }) else {
+    pub fn split_of(&self, pat: impl NodePat) -> (&[Node], &[Node]) {
+        if let Some(splitted) = self.split_once(pat) {
+            splitted
+        } else {
             panic!("split_of node is not children of self")
-        };
-        self.sub.split_at(i)
+        }
     }
 
-    pub fn split_part(&self, kind: &str) -> Option<(&[Node], &[Node])> {
+    pub fn split_once(&self, pat: impl NodePat) -> Option<(&[Node], &[Node])> {
         let sub = self.sub();
-        let i = sub.iter().position(|it| it.kind == kind)?;
+        let i = sub.iter().position(|it| pat.matches(it))?;
         Some((&sub[..i], &sub[i+1..]))
     }
 
