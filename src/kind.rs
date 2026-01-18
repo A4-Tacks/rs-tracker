@@ -25,12 +25,6 @@ pub fn is_item_or_let(node: &Node) -> bool {
     is_item(node) || node.kind == "LET_STMT"
 }
 
-pub fn is_pure_stmt(node: &Node) -> bool {
-    matches!(node.kind.as_str(),
-        | "LET_STMT"
-        | "EXPR_STMT")
-}
-
 pub fn is_trivia(node: &Node) -> bool {
     matches!(node.kind.as_str(),
         | "WHITESPACE"
@@ -46,4 +40,11 @@ pub fn is_content(node: &Node) -> bool {
         | "R_BRACK"
         | "L_CURLY"
         | "R_CURLY")
+}
+
+pub fn is_jumping(node: &Node) -> bool {
+    matches!(node.kind.as_str(),
+        | "BREAK_EXPR"
+        | "RETURN_EXPR"
+        | "CONTINUE_EXPR")
 }

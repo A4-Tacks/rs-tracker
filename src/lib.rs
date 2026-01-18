@@ -154,7 +154,10 @@ pub fn term_expr_inserts(
                     at!(l_curly.end(), r#"{indent}{{_track!(*"{label_mark}");}}"#);
                 }
             }
-            _ if kind::is_pure_stmt(node) => if label_stmt {
+            "LET_STMT" => if label_stmt {
+                at!(node.end(), r#"{indent}{{_track!(*"{label_mark}");}}"#);
+            }
+            "EXPR_STMT" => if label_stmt && !like_jumping(node, src) {
                 at!(node.end(), r#"{indent}{{_track!(*"{label_mark}");}}"#);
             }
             _ => {}
@@ -189,6 +192,7 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
         "STMT_LIST" => {
             let tail_expr = tail.sub().iter().rfind(|it| {
                 kind::is_content(*it) && !kind::is_item_or_let(*it)
+                    && it.kind != "EXPR_STMT"
             })?;
             each_value_expr_leafs(tail_expr, handler)?
         }
@@ -206,6 +210,24 @@ fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option
         _ => handler(tail),
     }
     Some(())
+}
+
+fn like_jumping(node: &Node, src: &str) -> bool {
+    node.any(|node| {
+        if node.kind == "MACRO_EXPR"
+            && let Some(mcall) = node.find_children("MACRO_CALL")
+            && let Some(path) = mcall.find_children("PATH")
+            && like_panic(&src[path])
+        {
+            return true;
+        }
+        kind::is_jumping(node)
+    })
+}
+
+fn like_panic(path: &str) -> bool {
+    let name = path.rsplit_once(':').map_or(path, |it| it.1);
+    matches!(name, "panic" | "unreachable" | "todo" | "unimplemented")
 }
 
 enum Block {
@@ -376,6 +398,18 @@ r#"fn foo(n: u8) -> Option<u8> {
                 () => {
                     baz()?
                 },
+                () => {
+                    let _ = 3;
+                    return;
+                }
+                () => {
+                    let _ = 3;
+                    break;
+                }
+                () => {
+                    let _ = 3;
+                    unreachable!();
+                }
             }
         }
         "#);
@@ -400,8 +434,26 @@ r#"fn foo(n: u8) -> Option<u8> {
                     () => {_track!{%"'3  ",{{_track!(*"'4  ");}}}},
                     () => {
                         {_track!(*"'5  ");}
-                        {_track!{%"'4  ",{_track!(@"'5  ",baz())}?}}
+                        {_track!{%"'4  ",{_track!(@"'8  ",baz())}?}}
                     },
+                    () => {_track!{%"'5  ",{
+                        {_track!(*"'6  ");}
+                        let _ = 3;
+                        {_track!(*"'7  ");}
+                        return{_track!(+"'9  ",)};
+                    }}}
+                    () => {_track!{%"'6  ",{
+                        {_track!(*"'8  ");}
+                        let _ = 3;
+                        {_track!(*"'9  ");}
+                        break;
+                    }}}
+                    () => {_track!{%"'7  ",{
+                        {_track!(*"'10 ");}
+                        let _ = 3;
+                        {_track!(*"'11 ");}
+                        unreachable!();
+                    }}}
                 }
             }
         "#]].assert_eq(&s);

@@ -55,6 +55,10 @@ impl Node {
         self.sub.iter().find(|it| it.kind == kind)
     }
 
+    pub fn any(&self, f: impl Fn(&Node) -> bool) -> bool {
+        self.sub().iter().any(f)
+    }
+
     pub fn next_of(&self, node: &Node) -> Option<&Node> {
         self.split_of(node).1.first()
     }
