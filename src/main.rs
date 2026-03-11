@@ -9,6 +9,7 @@ fn main() {
         -a, --expand-debug  "use `{:#?}` print";
         -e, --stderr        "use eprintln output";
         -s, --label-stmts   "insert label before statements";
+        -l, --label-lets    "insert label after let statements";
         -i, --indent        "indent function name";
         -d, --delete        "delete mode, delete generated _track";
         -p, --program=PATH  "rust-analyzer path";
@@ -46,6 +47,7 @@ fn main() {
         debug,
         stderr:         matched.opt_present("stderr"),
         label_stmt:     matched.opt_present("label-stmts"),
+        label_lets:     matched.opt_present("label-lets"),
         indent_name:    matched.opt_present("indent"),
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
