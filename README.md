@@ -1,5 +1,15 @@
 Insert tracking code into rust fn
 
+Usage
+---------------------------------------------------------------
+```sh
+rs-tracker < src/main.rs > out.rs
+```
+
+If you use Vim, `:%!rs-tracker`, `:'<,'>!rs-tracker`
+
+**NOTE**: Suggest using Git or other VCS to backup source code
+
 Example
 ---------------------------------------------------------------
 ```text
