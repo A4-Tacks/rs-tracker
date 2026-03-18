@@ -3,7 +3,7 @@ Insert tracking code into rust fn
 Usage
 ---------------------------------------------------------------
 ```sh
-rs-tracker < src/main.rs > out.rs
+rs-tracker src/main.rs
 ```
 
 If you use Vim, `:%!rs-tracker`, `:'<,'>!rs-tracker`

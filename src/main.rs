@@ -26,7 +26,7 @@ fn main() {
     if matched.opt_present("help") {
         let desc = env!("CARGO_PKG_DESCRIPTION");
         let brief = options.short_usage(args().next().as_deref().unwrap_or("?"));
-        let usage = options.usage(&format!("{brief}\n{desc}"));
+        let usage = options.usage(&format!("{brief} [FILE]\n{desc}"));
         println!("{}", usage.trim_end());
         return;
     }
@@ -34,10 +34,6 @@ fn main() {
         let v = env!("CARGO_PKG_VERSION");
         println!("{v}");
         return;
-    }
-    if let Some(arg) = matched.free.first() {
-        eprintln!("Excess argument: {arg:?}");
-        exit(2)
     }
 
     let mut debug = if !matched.opt_present("no-debug") { Debug::Inline } else { Debug::Disable };
@@ -53,7 +49,15 @@ fn main() {
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
 
-    let mut src = match io::read_to_string(stdin().lock()) {
+    if let Some(arg) = matched.free.get(1) {
+        eprintln!("Excess argument: {arg:?}");
+        exit(2)
+    }
+    let edit_path = matched.free.first().filter(|it| *it != "-");
+    let src = edit_path
+        .map(|path| fs_err::read_to_string(path).map_err(|e| e.to_string()))
+        .unwrap_or_else(|| io::read_to_string(stdin().lock()).map_err(|e| e.to_string()));
+    let mut src = match src {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{e}");
@@ -86,5 +90,8 @@ fn main() {
         let deletes = rs_tracker::remove_tracks(&node, &src);
         edits::apply_deletes(deletes, &mut src);
     }
-    println!("{}", src.trim_end());
+    match edit_path {
+        Some(path) => fs_err::write(path, &src).unwrap(),
+        None => println!("{}", src.trim_end()),
+    }
 }
