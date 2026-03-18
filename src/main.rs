@@ -24,8 +24,9 @@ fn main() {
         },
     };
     if matched.opt_present("help") {
+        let desc = env!("CARGO_PKG_DESCRIPTION");
         let brief = options.short_usage(args().next().as_deref().unwrap_or("?"));
-        let usage = options.usage(&brief);
+        let usage = options.usage(&format!("{brief}\n{desc}"));
         println!("{}", usage.trim_end());
         return;
     }

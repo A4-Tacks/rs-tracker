@@ -2,6 +2,7 @@
 name = "rs-tracker"
 version = "0.3.3"
 edition = "2024"
+description = "Insert tracking code into rust fn"
 
 [dependencies]
 expect-test = "1.5.1"
