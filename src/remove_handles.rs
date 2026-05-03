@@ -7,6 +7,7 @@ pub fn remove_tracks(node: &node::Node, src: &str) -> Vec<TextRange> {
     node.visit(&mut |node, action| Some(if action.is_enter() {
         let handler = &mut Handler { src, node, deletes: &mut deletes };
         handle_expr_macro_call_block(handler);
+        handle_pre_decl_unused_block_attr(handler);
         handle_pre_decl_trait(handler);
         handle_pre_decl_macro_rules(handler);
         handle_pre_decl_enter(handler);
@@ -60,6 +61,18 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
         }
     }
 
+    None
+}
+
+fn handle_pre_decl_unused_block_attr(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
+    if node.kind != "STMT_LIST" {
+        return None;
+    }
+    let attr = node.find_children("ATTR")?;
+    if &src[attr] != "#![allow(unused_braces)]" {
+        return None;
+    }
+    deletes.push(attr.range());
     None
 }
 
