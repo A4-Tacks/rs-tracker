@@ -26,4 +26,4 @@ trap CATCH_ERROR ERR # }}}
 test $# = 0
 cd -- "$(command dirname -- "$0")" || exit
 rust-analyzer parse < ./input_src |
-    diff --color=auto -u - ./input_src.rast
+    diff --color=auto -u ./input_src.rast -
