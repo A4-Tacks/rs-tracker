@@ -367,7 +367,7 @@ SOURCE_FILE@0..23312
         ATTR@843..854
           POUND@843..844 "#"
           L_BRACK@844..845 "["
-          META@845..853
+          PATH_META@845..853
             PATH@845..853
               PATH_SEGMENT@845..853
                 NAME_REF@845..853
@@ -432,7 +432,7 @@ SOURCE_FILE@0..23312
         ATTR@1040..1051
           POUND@1040..1041 "#"
           L_BRACK@1041..1042 "["
-          META@1042..1050
+          PATH_META@1042..1050
             PATH@1042..1050
               PATH_SEGMENT@1042..1050
                 NAME_REF@1042..1050
@@ -505,7 +505,7 @@ SOURCE_FILE@0..23312
     ATTR@1154..1170
       POUND@1154..1155 "#"
       L_BRACK@1155..1156 "["
-      META@1156..1169
+      TOKEN_TREE_META@1156..1169
         PATH@1156..1162
           PATH_SEGMENT@1156..1162
             NAME_REF@1156..1162
@@ -634,7 +634,7 @@ SOURCE_FILE@0..23312
         ATTR@1320..1329
           POUND@1320..1321 "#"
           L_BRACK@1321..1322 "["
-          META@1322..1328
+          PATH_META@1322..1328
             PATH@1322..1328
               PATH_SEGMENT@1322..1328
                 NAME_REF@1322..1328
@@ -2940,7 +2940,7 @@ SOURCE_FILE@0..23312
     ATTR@4634..4659
       POUND@4634..4635 "#"
       L_BRACK@4635..4636 "["
-      META@4636..4658
+      TOKEN_TREE_META@4636..4658
         PATH@4636..4642
           PATH_SEGMENT@4636..4642
             NAME_REF@4636..4642
@@ -5112,15 +5112,12 @@ SOURCE_FILE@0..23312
     ATTR@10115..10127
       POUND@10115..10116 "#"
       L_BRACK@10116..10117 "["
-      META@10117..10126
-        PATH@10117..10120
-          PATH_SEGMENT@10117..10120
-            NAME_REF@10117..10120
-              IDENT@10117..10120 "cfg"
-        TOKEN_TREE@10120..10126
-          L_PAREN@10120..10121 "("
+      CFG_META@10117..10126
+        CFG_KW@10117..10120 "cfg"
+        L_PAREN@10120..10121 "("
+        CFG_ATOM@10121..10125
           IDENT@10121..10125 "test"
-          R_PAREN@10125..10126 ")"
+        R_PAREN@10125..10126 ")"
       R_BRACK@10126..10127 "]"
     WHITESPACE@10127..10128 "\n"
     MOD_KW@10128..10131 "mod"
@@ -5213,7 +5210,7 @@ SOURCE_FILE@0..23312
         ATTR@14695..14702
           POUND@14695..14696 "#"
           L_BRACK@14696..14697 "["
-          META@14697..14701
+          PATH_META@14697..14701
             PATH@14697..14701
               PATH_SEGMENT@14697..14701
                 NAME_REF@14697..14701
@@ -5299,7 +5296,7 @@ SOURCE_FILE@0..23312
         ATTR@14842..14849
           POUND@14842..14843 "#"
           L_BRACK@14843..14844 "["
-          META@14844..14848
+          PATH_META@14844..14848
             PATH@14844..14848
               PATH_SEGMENT@14844..14848
                 NAME_REF@14844..14848
