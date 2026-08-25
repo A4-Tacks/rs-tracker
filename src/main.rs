@@ -6,6 +6,7 @@ use rs_tracker::{Config, Debug, edits};
 fn main() {
     let options = getopts_options! {
         -n, --no-debug      "not print return value debug";
+        -N, --no-newline    "not insert newline before some tracks";
         -a, --expand-debug  "use `{:#?}` print";
         -e, --stderr        "use eprintln output";
         -s, --label-stmts   "insert label before statements";
@@ -42,6 +43,7 @@ fn main() {
     }
     let config = Config {
         debug,
+        inline:         matched.opt_present("no-newline"),
         stderr:         matched.opt_present("stderr"),
         label_stmt:     matched.opt_present("label-stmts"),
         label_lets:     matched.opt_present("label-lets"),

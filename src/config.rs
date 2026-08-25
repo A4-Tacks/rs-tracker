@@ -14,6 +14,7 @@ impl Default for Debug {
 #[derive(Debug, Default)]
 pub struct Config {
     pub debug: Debug,
+    pub inline: bool,
     pub stderr: bool,
     pub label_stmt: bool,
     pub label_lets: bool,
