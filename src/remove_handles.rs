@@ -57,7 +57,7 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
             let comma = tt.find_children("COMMA")?;
 
             if ty == Some("%") && comma.end() == r_delim.start() {
-                deletes.push(indent_before(node, src)?);
+                deletes.extend(indent_before(node, src));
             }
 
             deletes.push(TextRange::new(node.start(), comma.end()));
