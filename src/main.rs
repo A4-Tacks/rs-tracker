@@ -3,6 +3,27 @@ use std::{env::args, io::{self, Write, stdin}, process::{Command, Stdio, exit}};
 use getopts_macro::getopts_options;
 use rs_tracker::{Config, Debug, edits};
 
+fn parse_source(program: &str, src: &str) -> rs_tracker::Node {
+    let mut child = Command::new(program)
+        .arg("parse")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("cannot start rust-analyzer");
+    child.stdin.take()
+        .expect("cannot init piped stdin")
+        .write_all(src.as_bytes())
+        .expect("write to rust-analyzer error");
+
+    let r_a_out = child.wait_with_output().expect("cannot take rust-analyzer outputs");
+    if !r_a_out.status.success() {
+        eprintln!("rust-analyzer exit code fail");
+        exit(r_a_out.status.code().unwrap_or(128))
+    }
+    let rowan = String::from_utf8_lossy(&r_a_out.stdout);
+    rs_tracker::make(&rowan)
+}
+
 fn main() {
     let options = getopts_options! {
         -n, --no-debug      "not print return value debug";
@@ -13,6 +34,7 @@ fn main() {
         -l, --label-lets    "insert label after let statements";
         -i, --indent        "indent function name";
         -d, --delete        "delete mode, delete generated _track";
+        -D, --delete-loop   "like --delete, but delete until source unchanged";
         -p, --program=PATH  "rust-analyzer path";
         -h, --help          "show help messages";
         -v, --version       "show version";
@@ -66,31 +88,25 @@ fn main() {
             exit(1)
         },
     };
-    let mut child = Command::new(program)
-        .arg("parse")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("cannot start rust-analyzer");
-    child.stdin.take()
-        .expect("cannot init piped stdin")
-        .write_all(src.as_bytes())
-        .expect("write to rust-analyzer error");
 
-    let r_a_out = child.wait_with_output().expect("cannot take rust-analyzer outputs");
-    if !r_a_out.status.success() {
-        eprintln!("rust-analyzer exit code fail");
-        exit(r_a_out.status.code().unwrap_or(128))
-    }
-    let rowan = String::from_utf8_lossy(&r_a_out.stdout);
+    let mut node = parse_source(&program, &src);
+    if matched.opt_present("delete-loop") {
+        let mut prev_len = src.len();
+        for _ in 0..50 {
+            let deletes = rs_tracker::remove_tracks(&node, &src);
+            edits::apply_deletes(deletes, &mut src);
 
-    let node = rs_tracker::make(&rowan);
-    if !matched.opt_present("delete") {
-        let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
-        edits::apply_inserts(inserts, &mut src);
-    } else {
+            if std::mem::replace(&mut prev_len, src.len()) == src.len() {
+                break
+            }
+            node = parse_source(&program, &src);
+        }
+    } else if matched.opt_present("delete") {
         let deletes = rs_tracker::remove_tracks(&node, &src);
         edits::apply_deletes(deletes, &mut src);
+    } else {
+        let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
+        edits::apply_inserts(inserts, &mut src);
     }
     match edit_path {
         Some(path) => fs_err::write(path, &src).unwrap(),
