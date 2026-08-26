@@ -252,7 +252,7 @@ fn pat_binds(node: &Node) -> Vec<TextRange> {
                 .flat_map(pat_binds)
                 .collect()
         }
-        "TUPLE_PAT" | "LET_STMT" | "LET_EXPR" | "RECORD_PAT_FIELD" => {
+        "TUPLE_PAT" | "TUPLE_STRUCT_PAT" | "LET_STMT" | "LET_EXPR" | "RECORD_PAT_FIELD" => {
             node.sub().iter().flat_map(pat_binds).collect()
         }
         _ => vec![],
@@ -578,7 +578,7 @@ r#"fn foo(n: u8) -> Option<u8> {
             let x = 2;
             bar(x);
             let (mut y, (z, t)) = (2, (3, 4));
-            let Foo { m } = todo!();
+            let (Foo { m }, Bar(n)) = todo!();
             let uninit;
             ()
         }
@@ -593,8 +593,9 @@ r#"fn foo(n: u8) -> Option<u8> {
                 {_track!(*"'2  ", y);}
                 {_track!(*"'3  ", z);}
                 {_track!(*"'4  ", t);}
-                let Foo { m } = todo!();
+                let (Foo { m }, Bar(n)) = todo!();
                 {_track!(*"'5  ", m);}
+                {_track!(*"'6  ", n);}
                 let uninit;
                 {_track!{%"'0  ",()}}
             }
