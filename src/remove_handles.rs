@@ -56,6 +56,10 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
             let r_delim = tt.find_children("R_CURLY").or_else(|| tt.find_children("R_PAREN"))?;
             let comma = tt.find_children("COMMA")?;
 
+            if ty == Some("%") && comma.end() == r_delim.start() {
+                deletes.push(indent_before(node, src)?);
+            }
+
             deletes.push(TextRange::new(node.start(), comma.end()));
             deletes.push(TextRange::new(r_delim.start(), node.end()));
         }

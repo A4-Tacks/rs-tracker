@@ -163,7 +163,7 @@ pub fn term_expr_inserts(
                         let (tail, _) = node.split_once("R_CURLY")?;
                         let tail = tail.iter().rfind(|it| !kind::is_trivia(*it))?;
                         let indent = indent_of!(src, [node]).unwrap_or("");
-                        at!(tail.end(), r#"{indent}{{_track!{{%"{mark}",()}}}}"#);
+                        at!(tail.end(), r#"{indent}{{_track!{{%"{mark}",}}}}"#);
                     }
                 },
                 Block::Closure => {},
@@ -387,6 +387,7 @@ r#"fn foo(n: u8) -> Option<u8> {
         }
     }
 
+    #[track_caller]
     fn check_apply_and_remove(pass: u32, cfg: Config, src: &str, expect: Expect) {
         let source = trim_indent(src);
         let mut s = source.clone();
@@ -467,21 +468,19 @@ r#"fn foo(n: u8) -> Option<u8> {
 
     #[test]
     fn test_no_tail_return() {
-        let mut s = trim_indent(r#"
+        let source = r#"
         fn foo() {
             let x = 2;
         }
-        "#);
-        let node = parse_source(&s);
-        let inserts = term_expr_inserts(&node, &s, Config { label_stmt: true, ..Default::default() });
-        edits::apply_inserts(inserts, &mut s);
-        expect![[r#"
+        "#;
+        let cfg = Config { label_stmt: true, ..Default::default() };
+        check_apply_and_remove(2, cfg, source, expect![[r#"
             fn foo() {#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let x = 2;
-                {_track!{%"'0  ",()}}
+                {_track!{%"'0  ",}}
                 {_track!(*"'1  ");}
             }
-        "#]].assert_eq(&s);
+        "#]]);
     }
 
     #[test]
