@@ -6,7 +6,7 @@ description = "Insert tracking code into rust fn"
 
 [dependencies]
 fs-err = "3.2.2"
-getopts-macro = "0.1.8"
+getopts-macro = "0.2.3"
 itertools = "0.14.0"
 smol_strc = "0.3.4"
 text-size = "1.1.1"
