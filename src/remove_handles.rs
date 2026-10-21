@@ -72,11 +72,9 @@ fn handle_pre_decl_unused_block_attr(Handler { src, node, deletes }: &mut Handle
     if node.kind != "STMT_LIST" {
         return None;
     }
-    let attr = node.find_children("ATTR")?;
-    if &src[attr] != "#![allow(unused_braces)]" {
-        return None;
-    }
-    deletes.push(attr.range());
+    node.sub().iter().filter(|it| it.kind == "ATTR")
+        .filter(|&attr| matches!(&src[attr], "#![allow(unused_braces)]" | "#![cfg_attr(rustfmt, rustfmt::skip)]"))
+        .for_each(|attr| deletes.push(attr.range()));
     None
 }
 
