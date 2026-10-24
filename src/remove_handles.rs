@@ -8,7 +8,8 @@ pub fn remove_tracks(node: &node::Node, src: &str) -> Vec<TextRange> {
         let handler = &mut Handler { src, node, deletes: &mut deletes };
         handle_expr_macro_call_block(handler);
         handle_pre_decl_unused_block_attr(handler);
-        handle_pre_decl_trait(handler);
+        handle_pre_decl_traits(handler);
+        handle_pre_decl_struct(handler);
         handle_pre_decl_macro_rules(handler);
         handle_pre_decl_enter(handler);
         handler_remove_closure_comment(handler);
@@ -72,29 +73,50 @@ fn handle_pre_decl_unused_block_attr(Handler { src, node, deletes }: &mut Handle
     if node.kind != "STMT_LIST" {
         return None;
     }
-    node.sub().iter().filter(|it| it.kind == "ATTR")
+    node.find_childrens("ATTR")
         .filter(|&attr| matches!(&src[attr], "#![allow(unused_braces)]" | "#![cfg_attr(rustfmt, rustfmt::skip)]"))
         .for_each(|attr| deletes.push(attr.range()));
     None
 }
 
-fn handle_pre_decl_trait(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
+fn handle_pre_decl_traits(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
     if node.kind != "STMT_LIST" {
         return None;
     }
-    let trait_ = node.find_children("TRAIT")?;
-    if &src[trait_.find_children("NAME")?] != "_IsTryOk" {
+    node.find_childrens("TRAIT")
+        .filter_map(|trait_| Some((trait_.find_children("NAME")?, trait_)))
+        .filter(|(name, _)| matches!(&src[*name], "_IsTryOk" | "_Opaque"))
+        .try_for_each(|(name, trait_)|
+    {
+        deletes.push(trait_.range());
+
+        for next in node.split_of(&trait_).1 {
+            if next.kind != "IMPL" {
+                return None;
+            }
+            if &src[next.find_children("PATH_TYPE")?] != &src[name] {
+                return None;
+            }
+            deletes.push(next.range());
+        }
+        Some(())
+    })
+}
+
+fn handle_pre_decl_struct(Handler { src, node, deletes }: &mut Handler) -> Option<()> {
+    if node.kind != "STMT_LIST" {
         return None;
     }
-    deletes.push(trait_.range());
-    for next in node.sub().iter()
-        .skip_while(|it| it.end() != trait_.end())
-        .skip(1)
-    {
+    let strukt = node.find_children("STRUCT")?;
+    if &src[strukt.find_children("NAME")?] != "_S" {
+        return None;
+    }
+    deletes.push(strukt.range());
+    for next in node.split_of(&strukt).1 {
         if next.kind != "IMPL" {
             return None;
         }
-        if &src[next.find_children("PATH_TYPE")?] != "_IsTryOk" {
+        if &src[next.find_childrens("PATH_TYPE").last()?] != "_S<T>" {
             return None;
         }
         deletes.push(next.range());

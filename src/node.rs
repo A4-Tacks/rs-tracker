@@ -54,7 +54,11 @@ impl Node {
     }
 
     pub fn find_children(&self, pat: impl NodePat) -> Option<&Node> {
-        self.sub.iter().find(|it| pat.matches(*it))
+        self.find_childrens(pat).next()
+    }
+
+    pub fn find_childrens(&self, pat: impl NodePat) -> impl Iterator<Item = &Node> {
+        self.sub.iter().filter(move |it| pat.matches(*it))
     }
 
     pub fn any(&self, f: impl Fn(&Node) -> bool) -> bool {
