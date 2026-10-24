@@ -19,4 +19,5 @@ pub struct Config {
     pub label_stmt: bool,
     pub label_lets: bool,
     pub indent_name: bool,
+    pub only_fn: bool,
 }

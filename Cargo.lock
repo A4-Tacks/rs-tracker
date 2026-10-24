@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "rs-tracker"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "dissimilar",
  "expect-test",

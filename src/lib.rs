@@ -14,7 +14,7 @@ pub use node::*;
 pub fn term_expr_inserts(
     node: &Node,
     src: &str,
-    Config { debug, stderr, label_stmt, label_lets, indent_name, inline }: Config,
+    Config { debug, stderr, label_stmt, label_lets, indent_name, inline, only_fn }: Config,
 ) -> Vec<(TextSize, SmolStr)> {
     let mut inserts = vec![];
     macro_rules! at {
@@ -45,7 +45,7 @@ pub fn term_expr_inserts(
         });
 
         if action.is_leave() {
-            if node.kind == "FN" || node.kind == "CLOSURE_EXPR" {
+            if node.kind == "FN" || node.kind == "CLOSURE_EXPR" && !only_fn {
                 fn_names.pop().unwrap();
             }
             return None;
@@ -54,7 +54,7 @@ pub fn term_expr_inserts(
         if node.kind == "FN" {
             let name = node.find_children("NAME")?;
             fn_names.push(src[name].into());
-        } else if node.kind == "CLOSURE_EXPR" {
+        } else if node.kind == "CLOSURE_EXPR" && !only_fn {
             if is_complex_closure(node) {
                 let name = format_smolstr!("closure{closures}");
                 at!(node.start(), "/*{name}*/");
@@ -130,7 +130,7 @@ pub fn term_expr_inserts(
                 at!(node.start(), r#"{{_track!(@"{mark}","#);
                 at!(op.start(), r#")}}"#);
             }
-            "CLOSURE_EXPR" => {
+            "CLOSURE_EXPR" if !only_fn => {
                 let tail = node.sub().last()?;
                 at!(tail.start(), r#"{{{try_trait}"#);
 
@@ -439,6 +439,38 @@ r#"fn foo(n: u8) -> Option<u8> {
                 }};
                 if m == 0 {
                     return{_track!(+"'6  ", None)};
+                }
+                {_track!{%"'0  ",Some(m)}}
+            }
+        "#]].assert_eq(&s);
+    }
+
+    #[test]
+    fn test_only_fn_replace() {
+        let mut s = TEST_SRC.to_string();
+        let node = parse_source(TEST_SRC);
+        let inserts = term_expr_inserts(&node, &s, Config { only_fn: true, ..Default::default() });
+        edits::apply_inserts(inserts, &mut s);
+        expect![[r#"
+            fn foo(n: u8) -> Option<u8> {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+                let m = {_track!(@"'1  ",n.checked_sub(16))}?;
+                let _ = || 2;
+                let _ = || {
+                    println!("xxx");
+                    if true {
+                        3
+                    } else if cond {
+                        0
+                    } else {
+                        if true {
+                            4
+                        } else {
+                            5
+                        }
+                    }
+                };
+                if m == 0 {
+                    return{_track!(+"'2  ", None)};
                 }
                 {_track!{%"'0  ",Some(m)}}
             }

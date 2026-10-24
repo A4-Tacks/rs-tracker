@@ -33,6 +33,7 @@ fn main() {
         -s, --label-stmts   "insert label before statements";
         -l, --label-lets    "insert label after let statements";
         -i, --indent        "indent function name";
+        -t, --trim-closures "trim closure labels, only track functions";
         -d, --delete        "delete mode, delete generated _track";
         -D, --delete-loop   "like --delete, but delete until source unchanged";
         -p, --program=PATH  "rust-analyzer path";
@@ -70,6 +71,7 @@ fn main() {
         label_stmt:     matched.opt_present("label-stmts"),
         label_lets:     matched.opt_present("label-lets"),
         indent_name:    matched.opt_present("indent"),
+        only_fn:        matched.opt_present("trim-closures"),
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
 
