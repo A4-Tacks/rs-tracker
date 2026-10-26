@@ -64,6 +64,8 @@ pub fn term_expr_inserts(
             }
         }
         let name = fn_names.last().unwrap();
+        let tracked = fn_names.len() > 1;
+        let (label_stmt, label_lets) = (label_stmt&tracked, label_lets&tracked);
 
         if name == &SIMPLE_CLOSURE {
             return None;
@@ -568,6 +570,14 @@ r#"fn foo(n: u8) -> Option<u8> {
                 }
             }
         }
+        const NO: () = {
+            let _ = ();
+            ()
+        };
+        static NO: () = {
+            let _ = ();
+            ()
+        };
         "#;
         let cfg = Config { label_stmt: true, ..Default::default() };
         check_apply_and_remove(2, cfg, source, expect![[r#"
@@ -610,6 +620,14 @@ r#"fn foo(n: u8) -> Option<u8> {
                     }}}
                 }
             }
+            const NO: () = {
+                let _ = ();
+                ()
+            };
+            static NO: () = {
+                let _ = ();
+                ()
+            };
         "#]]);
     }
 
