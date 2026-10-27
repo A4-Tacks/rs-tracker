@@ -92,10 +92,10 @@ fn handle_pre_decl_traits(Handler { src, node, deletes }: &mut Handler) -> Optio
 
         for next in node.split_of(&trait_).1 {
             if next.kind != "IMPL" {
-                return None;
+                break;
             }
             if &src[next.find_children("PATH_TYPE")?] != &src[name] {
-                return None;
+                break;
             }
             deletes.push(next.range());
         }

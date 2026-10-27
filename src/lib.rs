@@ -409,9 +409,10 @@ r#"fn foo(n: u8) -> Option<u8> {
         expect.assert_eq(&s);
 
 
-        for _ in 0..pass {
+        for pass in 0..pass {
             let node = parse_source(&s);
             let removes = remove_tracks(&node, &s);
+            assert!(!removes.is_empty(), "redundant pass: {pass}");
             edits::apply_deletes(removes, &mut s);
         }
 
@@ -518,7 +519,7 @@ r#"fn foo(n: u8) -> Option<u8> {
         }
         "#;
         let cfg = Config { label_stmt: true, ..Default::default() };
-        check_apply_and_remove(2, cfg, source, expect![[r#"
+        check_apply_and_remove(1, cfg, source, expect![[r#"
             fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let x = 2;
                 {_track!{%"'0  ",}}
@@ -532,7 +533,7 @@ r#"fn foo(n: u8) -> Option<u8> {
         }
         "#;
         let cfg = Config { label_stmt: true, inline: true, ..Default::default() };
-        check_apply_and_remove(2, cfg, source, expect![[r#"
+        check_apply_and_remove(1, cfg, source, expect![[r#"
             fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let x = 2;{_track!{%"'0  ",}}{_track!(*"'1  ");}
             }
@@ -644,7 +645,7 @@ r#"fn foo(n: u8) -> Option<u8> {
         }
         "#;
         let cfg = Config { label_lets: true, ..Default::default() };
-        check_apply_and_remove(2, cfg, source, expect![[r#"
+        check_apply_and_remove(1, cfg, source, expect![[r#"
             fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let x = 2;
                 {_track!(*"'1  ", x);}
