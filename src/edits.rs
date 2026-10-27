@@ -34,4 +34,25 @@ mod tests {
         ].into(), src);
         assert_eq!(src, "abcdef")
     }
+
+    #[test]
+    fn test_deletes() {
+        let src = &mut "abcdef".to_owned();
+        apply_deletes([
+            TextRange::at(TextSize::of("a"), TextSize::of("b")),
+            TextRange::at(TextSize::of("ab"), TextSize::of("c")),
+            TextRange::at(TextSize::of("abcde"), TextSize::of("f")),
+        ].into(), src);
+        assert_eq!(src, "ade")
+    }
+
+    #[test]
+    #[should_panic = "overlap deletes 1..3 & 2..5"]
+    fn test_overlaps_should_panic() {
+        let src = &mut "abcdef".to_owned();
+        apply_deletes([
+            TextRange::at(TextSize::of("a"), TextSize::of("bc")),
+            TextRange::at(TextSize::of("ab"), TextSize::of("cde")),
+        ].into(), src);
+    }
 }
