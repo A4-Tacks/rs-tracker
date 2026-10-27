@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Debug {
     Inline,
     Expand,
@@ -11,7 +11,7 @@ impl Default for Debug {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     pub debug: Debug,
     pub inline: bool,

@@ -11,6 +11,9 @@ pub fn apply_inserts(mut inserts: Vec<(TextSize, SmolStr)>, s: &mut String) {
 
 pub fn apply_deletes(mut deletes: Vec<TextRange>, s: &mut String) {
     deletes.sort_by_key(|range| u32::from(range.start()));
+    deletes.dedup_by(|rest, first| {
+        first.contains_range(*rest)
+    });
     for (a, b) in deletes.iter().tuple_windows() {
         assert!(a.end() <= b.start(), "overlap deletes {a:?} & {b:?}\n{deletes:#?}");
     }
@@ -54,5 +57,17 @@ mod tests {
             TextRange::at(TextSize::of("a"), TextSize::of("bc")),
             TextRange::at(TextSize::of("ab"), TextSize::of("cde")),
         ].into(), src);
+    }
+
+    #[test]
+    fn test_sub_deletes() {
+        let src = &mut "abcdef".to_owned();
+        apply_deletes([
+            TextRange::at(TextSize::of("a"), TextSize::of("bcde")),
+            TextRange::at(TextSize::of("ab"), TextSize::of("c")),
+            TextRange::at(TextSize::of("ab"), TextSize::of("c")),
+            TextRange::at(TextSize::of("abcde"), TextSize::of("f")),
+        ].into(), src);
+        assert_eq!(src, "a")
     }
 }

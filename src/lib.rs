@@ -727,4 +727,31 @@ r#"fn foo(n: u8) -> Option<u8> {
             }
         "#]]);
     }
+
+    #[test]
+    #[ignore]
+    fn slow_test_remove_multi_apply() {
+        let source = r#"
+        fn foo() -> i32 {
+            let x = 3;
+            f();
+            2
+        }
+        "#;
+        let cfg = Config { label_stmt: true, inline: true, label_lets: true, ..Default::default() };
+        let source = trim_indent(source);
+        let mut s = source.clone();
+        for _ in 0..3 {
+            let node = parse_source(&s);
+            let inserts = term_expr_inserts(&node, &s, cfg.clone());
+            edits::apply_inserts(inserts, &mut s);
+        }
+        for pass in 0..5 {
+            let node = parse_source(&s);
+            let removes = remove_tracks(&node, &s);
+            assert!(!removes.is_empty(), "redundant pass: {pass}");
+            edits::apply_deletes(removes, &mut s);
+        }
+        assert_eq!(source, s);
+    }
 }
