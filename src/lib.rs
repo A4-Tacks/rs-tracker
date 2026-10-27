@@ -86,10 +86,10 @@ pub fn term_expr_inserts(
         let indent = indent_of!(src, ancestors.iter().copied())
             .unwrap_or("\n");
         let block = Block::with(ancestors.iter().rev().map(|it| it.kind.as_str()));
-        let attr = match block { Block::Fn => "#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]", _ => "" };
+        let preattr = match block { Block::Fn => "#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]", _ => "" };
 
         let ps = "let __s=_S(&__val);let __s=__s._s();";
-        let try_trait = format!{"{attr}\
+        let preset = format!{"\
             trait _IsTryOk{{\
                 fn is_try_ok(&self)->bool;\
             }}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{{\
@@ -144,7 +144,7 @@ pub fn term_expr_inserts(
             }
             "CLOSURE_EXPR" if !only_fn => {
                 let tail = node.sub().last()?;
-                at!(tail.start(), r#"{{{try_trait}"#);
+                at!(tail.start(), r#"{{{preattr}{preset}"#);
 
                 each_value_expr_leafs(tail, &mut |tail| {
                     at!(tail.start(), r#"{{_track!{{%"{mark}","#);
@@ -156,7 +156,9 @@ pub fn term_expr_inserts(
             "STMT_LIST" => match block {
                 Block::Fn => {
                     let l_curly = node.find_children("L_CURLY")?;
-                    at!(l_curly.end(), "{try_trait}");
+                    let after = stmt_list_content_after(node)?;
+                    at!(l_curly.end(), "{preattr}");
+                    at!(after, "{preset}");
                     let mut has_ret = false;
 
                     each_value_expr_leafs(node, &mut |tail| {
@@ -287,6 +289,17 @@ fn like_jumping(node: &Node, src: &str) -> bool {
 fn like_panic(path: &str) -> bool {
     let name = path.rsplit_once(':').map_or(path, |it| it.1);
     matches!(name, "panic" | "unreachable" | "todo" | "unimplemented")
+}
+
+fn stmt_list_content_after(node: &Node) -> Option<TextSize> {
+    assert_eq!(node.kind.as_str(), "STMT_LIST");
+    let l_curly = node.find_children("L_CURLY")?;
+
+    // 不考虑内部文档注释, 想在内部文档注释后插入很麻烦
+    node.find_childrens(kind::Pred(kind::is_attr)).last()
+        .unwrap_or(l_curly)
+        .end()
+        .into()
 }
 
 enum Block {
@@ -504,6 +517,29 @@ r#"fn foo(n: u8) -> Option<u8> {
         edits::apply_inserts(inserts, &mut s);
         expect![[r#"
             fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+                let x = 2;
+                #[cfg(test)]
+                {_track!{%"'0  ",if cond {}}}
+            }
+        "#]].assert_eq(&s);
+    }
+
+    #[test]
+    fn test_inner_attr() {
+        let mut s = trim_indent(r#"
+        fn foo() {
+            #![cfg_attr(docsrs, doc(cfg(x)))]
+            let x = 2;
+            #[cfg(test)]
+            if cond {}
+        }
+        "#);
+        let node = parse_source(&s);
+        let inserts = term_expr_inserts(&node, &s, Config { ..Default::default() });
+        edits::apply_inserts(inserts, &mut s);
+        expect![[r#"
+            fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]
+                #![cfg_attr(docsrs, doc(cfg(x)))]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
                 let x = 2;
                 #[cfg(test)]
                 {_track!{%"'0  ",if cond {}}}

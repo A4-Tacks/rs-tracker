@@ -1,4 +1,4 @@
-use crate::kind::Kind;
+use crate::kind::Pred;
 
 use super::*;
 
@@ -47,7 +47,7 @@ fn handle_expr_macro_call_block(Handler { src, node, deletes }: &mut Handler) ->
         return None;
     }
     let tt = call.find_children("TOKEN_TREE")?;
-    let ty = tt.next_of(Kind(kind::is_delim)).map(|it| &src[it]);
+    let ty = tt.next_of(Pred(kind::is_delim)).map(|it| &src[it]);
     match ty {
         Some("*") => {
             deletes.push(node.range());

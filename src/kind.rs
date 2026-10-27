@@ -32,7 +32,11 @@ pub fn is_trivia(node: &Node) -> bool {
 }
 
 pub fn is_content(node: &Node) -> bool {
-    !is_trivia(node) && !is_delim(node) && node.kind != "ATTR"
+    !is_trivia(node) && !is_delim(node) && !is_attr(node)
+}
+
+pub fn is_attr(node: &Node) -> bool {
+    matches!(node.kind.as_str(), | "ATTR")
 }
 
 pub fn is_jumping(node: &Node) -> bool {
@@ -52,7 +56,7 @@ pub fn is_delim(node: &Node) -> bool {
         | "R_CURLY")
 }
 
-pub struct Kind<F: Fn(&Node) -> bool>(pub F);
+pub struct Pred<F: Fn(&Node) -> bool>(pub F);
 
 pub trait NodePat {
     fn matches(&self, node: &Node) -> bool;
@@ -64,7 +68,7 @@ impl<T: NodePat + ?Sized> NodePat for &T {
     }
 }
 
-impl<F: Fn(&Node) -> bool> NodePat for Kind<F> {
+impl<F: Fn(&Node) -> bool> NodePat for Pred<F> {
     fn matches(&self, node: &Node) -> bool {
         (self.0)(node)
     }
