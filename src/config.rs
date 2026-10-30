@@ -1,3 +1,5 @@
+use contains_match::PatternSet;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Debug {
     Inline,
@@ -20,4 +22,6 @@ pub struct Config {
     pub label_lets: bool,
     pub indent_name: bool,
     pub only_fn: bool,
+    pub included: PatternSet,
+    pub excluded: PatternSet,
 }

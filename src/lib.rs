@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use text::{is_complex_closure, ShowMark};
 use smol_strc::{SmolStr, format_smolstr};
 use text_size::{TextRange, TextSize};
@@ -11,85 +13,87 @@ pub mod node;
 pub mod edits;
 pub use node::*;
 
-pub fn term_expr_inserts(
-    node: &Node,
-    src: &str,
-    Config { debug, stderr, label_stmt, label_lets, indent_name, inline, only_fn }: Config,
-) -> Vec<(TextSize, SmolStr)> {
-    let mut inserts = vec![];
-    macro_rules! at {
-        ($at:expr, $($t:tt)*) => {
-            inserts.push(($at, format_smolstr!($($t)*)));
-        };
+pub struct EditInsert<'input, 'node> {
+    cfg: Config,
+    src: &'input str,
+    names: Vec<SmolStr>,
+    inserts: Vec<(TextSize, SmolStr)>,
+    mark: ShowMark,
+    closures: ShowMark,
+    ancestors: Vec<&'node Node>,
+    ignored_level: u32,
+}
+
+impl<'input, 'node> EditInsert<'input, 'node> {
+    pub fn create(src: &'input str, cfg: Config) -> Self {
+        Self {
+            cfg,
+            src,
+            names: vec![],
+            inserts: vec![],
+            mark: ShowMark(0.into()),
+            closures: ShowMark(0.into()),
+            ancestors: vec![],
+            ignored_level: 0,
+        }
     }
-    let mut fn_names = vec!["unnamed_fn".into()];
-    let mark = ShowMark(0.into());
-    let closures = ShowMark(0.into());
-    let debug = match debug {
-        Debug::Inline => " = {__s:?}",
-        Debug::Expand => " = {__s:#?}",
-        Debug::Disable => "",
-    };
-    let output = if stderr { "eprintln" } else { "println" };
-    let pather = r#"::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1)"#;
-    let mut ancestors: Vec<&Node> = vec![];
 
-    node.visit(&mut |node, action| {
-        const SIMPLE_CLOSURE: SmolStr = SmolStr::new_inline("__simple_closure__");
-
-        if action.is_leave() {
-            ancestors.pop().unwrap();
-        }
-        let ancestors = guard(&mut ancestors, |ancestors| if action.is_enter() {
-            ancestors.push(node);
+    pub fn generate_edits(mut self, node: &'node Node) -> Vec<(TextSize, SmolStr)> {
+        node.visit(&mut |node, action| {
+            match action {
+                VisitAction::Enter => {
+                    self.pre_enter(node);
+                    self.on_enter(node);
+                    self.post_enter(node);
+                },
+                VisitAction::Leave => self.on_leave(node),
+            }
+            None
         });
+        assert!(self.ancestors.is_empty(), "{:#?}", self.ancestors);
+        assert!(self.names.is_empty(), "{:#?}", self.names);
+        self.inserts
+    }
 
-        if action.is_leave() {
-            if node.kind == "FN" || node.kind == "CLOSURE_EXPR" && !only_fn {
-                fn_names.pop().unwrap();
-            }
-            return None;
-        }
+    fn text(&self, node: Option<&Node>) -> &'input str {
+        node.map_or("<?>", |node| &self.src[node])
+    }
 
-        if node.kind == "FN" {
-            let name = node.find_children("NAME")?;
-            fn_names.push(src[name].into());
-        } else if node.kind == "CLOSURE_EXPR" && !only_fn {
-            if is_complex_closure(node) {
-                let name = format_smolstr!("closure{closures}");
-                at!(node.start(), "/*{name}*/");
-                fn_names.push(name);
-            } else {
-                fn_names.push(SIMPLE_CLOSURE);
-            }
+    fn indent_of<I, N>(&self, a: I, u: &'input str) -> &'input str
+    where I: IntoIterator<Item = &'node N>,
+          I::IntoIter: DoubleEndedIterator,
+          N: Borrow<Node> + 'node,
+    {
+        if self.cfg.inline {
+            return "";
         }
-        let name = fn_names.last().unwrap();
-        let tracked = fn_names.len() > 1;
-        let (label_stmt, label_lets) = (label_stmt&tracked, label_lets&tracked);
+        let ancestors = a.into_iter().map(|it| it.borrow());
+        text::indent_of(self.src, ancestors).unwrap_or(u)
+    }
 
-        if name == &SIMPLE_CLOSURE {
-            return None;
+    fn preattr(&self, block: &Block) -> &'static str {
+        match block {
+            Block::Fn => "#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]",
+            _ => "",
         }
+    }
+
+    fn preset(&self) -> String {
+        let name = self.names.last().unwrap();
+        let pather = r#"::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1)"#;
         let iname = format_smolstr!(
             "[track] {}{name}",
-            if indent_name { "  ".repeat(fn_names.len().saturating_sub(2)) } else { String::new() },
+            if self.cfg.indent_name { "  ".repeat(self.names.len().saturating_sub(1)) } else { String::new() },
         );
-        macro_rules! indent_of {
-            ($src:expr, $anc:expr) => {
-                if inline {
-                    Some("")
-                } else {
-                    text::indent_of($src, $anc)
-                }
-            };
-        }
-        let indent = indent_of!(src, ancestors.iter().copied())
-            .unwrap_or("\n");
-        let block = Block::with(ancestors.iter().rev().map(|it| it.kind.as_str()));
-        let preattr = match block { Block::Fn => "#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]", _ => "" };
+        let debug = match self.cfg.debug {
+            Debug::Inline => " = {__s:?}",
+            Debug::Expand => " = {__s:#?}",
+            Debug::Disable => "",
+        };
+        let output = if self.cfg.stderr { "eprintln" } else { "println" };
 
         let ps = "let __s=_S(&__val);let __s=__s._s();";
-        let preset = format!{"\
+        format!{"\
             trait _IsTryOk{{\
                 fn is_try_ok(&self)->bool;\
             }}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{{\
@@ -129,7 +133,73 @@ pub fn term_expr_inserts(
                     $s,{pather},::core::line!(),::core::stringify!($n)); }});\
             }}\
             {output}!(\"{iname} enter      at {{}}:{{}}\",{pather},::core::line!());\
-            "};
+        "}
+    }
+
+    fn needs_track(&self, node: &Node) -> bool {
+        match node.kind.as_str() {
+            "FN" => true,
+            "CLOSURE_EXPR" => true,
+            _ => false,
+        }
+    }
+
+    fn needs_ignore_descendants(&self, name: &str) -> bool {
+        let included = self.cfg.included.is_empty() || self.cfg.included.is_match(name);
+        let matched = included && !self.cfg.excluded.is_match(name);
+        !matched
+    }
+
+    fn on_leave(&mut self, node: &Node) {
+        if self.needs_track(node) {
+            let name = self.names.pop().unwrap();
+
+            if self.needs_ignore_descendants(&name) {
+                self.ignored_level = self.ignored_level.checked_sub(1).unwrap();
+            }
+        }
+        self.ancestors.pop().unwrap();
+    }
+
+    fn pre_enter(&mut self, node: &'node Node) {
+        if self.needs_track(node) {
+            let name = match node.kind.as_str() {
+                "FN" => self.text(node.find_children("NAME")).into(),
+                "CLOSURE_EXPR" if is_complex_closure(node) => format_smolstr!("closure{}", self.closures),
+                "CLOSURE_EXPR" => "".into(),
+                _ => unreachable!(),
+            };
+
+            if self.needs_ignore_descendants(&name) {
+                self.ignored_level += 1;
+            }
+
+            self.names.push(name);
+        }
+    }
+
+    fn post_enter(&mut self, node: &'node Node) {
+        self.ancestors.push(node);
+    }
+
+    fn on_enter(&mut self, node: &Node) -> Option<()> {
+        if self.ignored_level != 0 {
+            return None;
+        }
+        let indent = self.indent_of(&self.ancestors, "\n");
+        let block = Block::with(self.ancestors.iter().rev().map(|it| it.kind.as_str()));
+        let preattr = self.preattr(&block);
+
+        macro_rules! at {
+            ($at:expr, $($t:tt)*) => {
+                self.inserts.push(($at, format_smolstr!($($t)*)));
+            };
+        }
+
+        let src = self.src;
+        let mark = &self.mark;
+        let tracked = !self.names.is_empty();
+        let (label_stmt, label_lets) = (self.cfg.label_stmt&tracked, self.cfg.label_lets&tracked);
 
         match node.kind.as_str() {
             "RETURN_EXPR" => {
@@ -142,9 +212,11 @@ pub fn term_expr_inserts(
                 at!(node.start(), r#"{{_track!(@"{mark}","#);
                 at!(op.start(), r#")}}"#);
             }
-            "CLOSURE_EXPR" if !only_fn => {
+            "CLOSURE_EXPR" if !self.cfg.only_fn && is_complex_closure(node) => {
                 let tail = node.sub().last()?;
-                at!(tail.start(), r#"{{{preattr}{preset}"#);
+
+                at!(node.start(), "/*{}*/", self.names.last().unwrap());
+                at!(tail.start(), r#"{{{preattr}{}"#, self.preset());
 
                 each_value_expr_leafs(tail, &mut |tail| {
                     at!(tail.start(), r#"{{_track!{{%"{mark}","#);
@@ -158,7 +230,7 @@ pub fn term_expr_inserts(
                     let l_curly = node.find_children("L_CURLY")?;
                     let after = stmt_list_content_after(node)?;
                     at!(l_curly.end(), "{preattr}");
-                    at!(after, "{preset}");
+                    at!(after, "{}", self.preset());
                     let mut has_ret = false;
 
                     each_value_expr_leafs(node, &mut |tail| {
@@ -176,14 +248,14 @@ pub fn term_expr_inserts(
                     if !has_ret {
                         let (tail, _) = node.split_once("R_CURLY")?;
                         let tail = tail.iter().rfind(|it| !kind::is_trivia(*it))?;
-                        let indent = indent_of!(src, [node]).unwrap_or("");
+                        let indent = self.indent_of([node], "");
                         at!(tail.end(), r#"{indent}{{_track!{{%"{mark}",}}}}"#);
                     }
                 },
                 Block::Closure => {},
                 Block::None => if label_stmt {
                     let l_curly = node.find_children("L_CURLY")?;
-                    let indent = indent_of!(src, [node]).unwrap_or("");
+                    let indent = self.indent_of([node], "");
                     at!(l_curly.end(), r#"{indent}{{_track!(*"{mark}");}}"#);
                 }
             }
@@ -200,12 +272,9 @@ pub fn term_expr_inserts(
             }
             _ => {}
         }
+
         None
-    });
-
-    assert_eq!(fn_names, ["unnamed_fn"]);
-
-    inserts
+    }
 }
 
 fn each_value_expr_leafs(tail: &Node, handler: &mut impl FnMut(&Node)) -> Option<()> {
@@ -320,22 +389,6 @@ impl Block {
     }
 }
 
-fn guard<T, F: FnOnce(T)>(_0: T, _1: F) -> Guard<T, F> {
-    Guard(_0.into(), _1.into())
-}
-struct Guard<T, F: FnOnce(T)>(Option<T>, Option<F>);
-impl<T, F: FnOnce(T)> std::ops::Deref for Guard<T, F> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref().unwrap()
-    }
-}
-impl<T, F: FnOnce(T)> Drop for Guard<T, F> {
-    fn drop(&mut self) {
-        self.1.take().unwrap()(self.0.take().unwrap())
-    }
-}
-
 mod remove_handles;
 pub use remove_handles::remove_tracks;
 
@@ -343,6 +396,7 @@ pub use remove_handles::remove_tracks;
 mod tests {
     use std::{io::Write, process::{Command, Stdio}};
 
+    use contains_match::{Pattern, PatternSet};
     use expect_test::{expect, Expect};
 
     use super::*;
@@ -410,6 +464,14 @@ r#"fn foo(n: u8) -> Option<u8> {
                 dissimilar::Chunk::Insert(text) => print!("\x1b[42m{}\x1b[0m", text),
             }
         }
+    }
+
+    fn term_expr_inserts(
+        node: &Node,
+        src: &str,
+        cfg: Config,
+    ) -> Vec<(TextSize, SmolStr)> {
+        EditInsert::create(src, cfg).generate_edits(node)
     }
 
     #[track_caller]
@@ -695,6 +757,80 @@ r#"fn foo(n: u8) -> Option<u8> {
                 {_track!(*"'6  ", n);}
                 let uninit;
                 {_track!{%"'0  ",()}}
+            }
+        "#]]);
+    }
+
+    #[test]
+    fn test_excluded_fn() {
+        let source = r#"
+        fn foo() {
+            let x = 2;
+            bar(x);
+        }
+        fn bar() {
+            fn baz() {
+                let x = 2;
+                f(x)
+            }
+            f(baz())
+        }
+        "#;
+        let excluded = PatternSet::from_iter([
+            Pattern::new("bar").unwrap()
+        ]);
+        let cfg = Config { label_lets: true, label_stmt: true, excluded, ..Default::default() };
+        check_apply_and_remove(1, cfg, source, expect![[r#"
+            fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+                let x = 2;
+                {_track!(*"'1  ", x);}
+                bar(x);
+                {_track!{%"'0  ",}}
+                {_track!(*"'2  ");}
+            }
+            fn bar() {
+                fn baz() {
+                    let x = 2;
+                    f(x)
+                }
+                f(baz())
+            }
+        "#]]);
+    }
+
+    #[test]
+    fn test_included_fn() {
+        let source = r#"
+        fn foo() {
+            let x = 2;
+            bar(x);
+        }
+        fn bar() {
+            fn baz() {
+                let x = 2;
+                f(x)
+            }
+            f(baz())
+        }
+        "#;
+        let included = PatternSet::from_iter([
+            Pattern::new("foo").unwrap()
+        ]);
+        let cfg = Config { label_lets: true, label_stmt: true, included, ..Default::default() };
+        check_apply_and_remove(1, cfg, source, expect![[r#"
+            fn foo() {#![cfg_attr(rustfmt, rustfmt::skip)]#![allow(unused_braces)]trait _IsTryOk{fn is_try_ok(&self)->bool;}impl<T,E>_IsTryOk for ::core::result::Result<T,E>{fn is_try_ok(&self)->bool{self.is_ok()}}impl<T>_IsTryOk for ::core::option::Option<T>{fn is_try_ok(&self)->bool{self.is_some()}}struct _S<T>(T);impl<T: ::core::fmt::Debug>_S<T>{fn _s(&self)->&T{&self.0}}impl<T>::core::fmt::Debug for _S<T>{fn fmt(&self,f:&mut::core::fmt::Formatter<'_>)->::core::fmt::Result{f.write_str("<opaque>")}}trait _Opaque {fn _s(&self)->&Self{self}}impl<T>_Opaque for _S<T>{}macro_rules!_track{(!)=>(());(!$t:tt)=>($t);(@$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);if !_IsTryOk::is_try_ok(&__val){let __s=_S(&__val);let __s=__s._s();println!("[track] foo tryret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!())}; __val });(+$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo return{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$($e:expr)?)=>({let __val = _track!(!$($e)?);let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); __val });(%$s:tt,$e:stmt $(;)?)=>({{$e};let __val = ();let __s=_S(&__val);let __s=__s._s();println!("[track] foo endret{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt)=>({println!("[track] foo labels{} at {}:{}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!()); });(*$s:tt,$n:ident)=>({let __val = &$n;let __s=_S(&__val);let __s=__s._s();println!("[track] foo labels{} at {}:{} let {}",$s,::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!(),::core::stringify!($n)); });}println!("[track] foo enter      at {}:{}",::core::file!().rsplit_once(['/','\\']).map_or(::core::file!(), |x|x.1),::core::line!());
+                let x = 2;
+                {_track!(*"'1  ", x);}
+                bar(x);
+                {_track!{%"'0  ",}}
+                {_track!(*"'2  ");}
+            }
+            fn bar() {
+                fn baz() {
+                    let x = 2;
+                    f(x)
+                }
+                f(baz())
             }
         "#]]);
     }

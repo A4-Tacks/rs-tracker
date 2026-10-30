@@ -1,5 +1,6 @@
 use std::{env::args, io::{self, Write, stdin}, process::{Command, Stdio, exit}};
 
+use contains_match::Pattern;
 use getopts_macro::getopts_options;
 use rs_tracker::{Config, Debug, edits};
 
@@ -34,6 +35,8 @@ fn main() {
         -l, --label-lets    "insert label after let statements";
         -i, --indent        "indent function name";
         -t, --trim-closures "trim closure labels, only track functions";
+        -I, --included*=P   "only track matched functions";
+        -E, --excluded*=P   "not track matched functions (contains-match crate)";
         -d, --delete        "delete mode, delete generated _track";
         -D, --delete-loop   "like --delete, but delete until source unchanged";
         -p, --program=PATH  "rust-analyzer path";
@@ -73,6 +76,8 @@ fn main() {
         label_lets:     matched.opt_present("label-lets"),
         indent_name:    matched.opt_present("indent"),
         only_fn:        matched.opt_present("trim-closures"),
+        included:       matched.opt_strs("included").iter().map(pat).collect(),
+        excluded:       matched.opt_strs("excluded").iter().map(pat).collect(),
     };
     let program = matched.opt_str("program").unwrap_or("rust-analyzer".to_owned());
 
@@ -108,11 +113,18 @@ fn main() {
         let deletes = rs_tracker::remove_tracks(&node, &src);
         edits::apply_deletes(deletes, &mut src);
     } else {
-        let inserts = rs_tracker::term_expr_inserts(&node, &src, config);
+        let inserts = rs_tracker::EditInsert::create(&src, config).generate_edits(&node);
         edits::apply_inserts(inserts, &mut src);
     }
     match edit_path {
         Some(path) => fs_err::write(path, &src).unwrap(),
         None => println!("{}", src.trim_end()),
     }
+}
+
+fn pat(s: &String) -> Pattern {
+    Pattern::new(s).unwrap_or_else(|e| {
+        eprintln!("invalid pattern {s:?}: {e}");
+        std::process::exit(2)
+    })
 }

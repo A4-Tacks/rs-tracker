@@ -31,6 +31,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "contains-match"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0098251c08831596136a3f68b2ad57ad3de9af42cafdb268e8cf275451b8e2d"
+
+[[package]]
 name = "dissimilar"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -114,8 +120,9 @@ dependencies = [
 
 [[package]]
 name = "rs-tracker"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
+ "contains-match",
  "dissimilar",
  "expect-test",
  "fs-err",

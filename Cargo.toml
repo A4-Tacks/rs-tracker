@@ -1,10 +1,11 @@
 [package]
 name = "rs-tracker"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2024"
 description = "Insert tracking code into rust fn"
 
 [dependencies]
+contains-match = "0.1.4"
 fs-err = "3.2.2"
 getopts-macro = "0.2.3"
 itertools = "0.14.0"
